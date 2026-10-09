@@ -1,0 +1,10 @@
+.env
+*.db
+*.db-shm
+*.db-wal
+/comporta
+/comporta.exe
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
+carga/resultados/

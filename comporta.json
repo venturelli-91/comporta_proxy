@@ -1,0 +1,33 @@
+{
+  "provedores": {
+    "deepseek": { "base_url": "https://api.deepseek.com", "chave_env": "DEEPSEEK_API_KEY", "max_conexoes": 512 }
+  },
+  "modelos": {
+    "rapido": {
+      "destinos": [
+        { "provedor": "deepseek", "modelo": "deepseek-flash" },
+        { "provedor": "deepseek", "modelo": "deepseek-v4-pro" }
+      ],
+      "concorrencia": 2000
+    },
+    "forte": {
+      "destinos": [
+        { "provedor": "deepseek", "modelo": "deepseek-v4-pro" },
+        { "provedor": "deepseek", "modelo": "deepseek-flash" }
+      ],
+      "concorrencia": 400
+    },
+    "migracao": {
+      "destinos": [{ "provedor": "deepseek", "modelo": "deepseek-flash" }],
+      "shadow": { "provedor": "deepseek", "modelo": "deepseek-v4-pro" },
+      "concorrencia": 400
+    }
+  },
+  "precos": {
+    "deepseek-flash": { "entrada_cache_hit": 0.028, "entrada_cache_miss": 0.28, "saida": 0.42 },
+    "deepseek-v4-pro": { "entrada_cache_hit": 0.14, "entrada_cache_miss": 1.4, "saida": 2.8 }
+  },
+  "pico": { "janelas_utc": [[1, 4], [6, 10]], "so_dias_uteis": true, "desconto_fora_pico_pct": 50 },
+  "cache": { "max_mb": 64, "ttl_s": 300 },
+  "timeouts": { "conexao_s": 5, "primeiro_token_s": 30, "entre_chunks_s": 60, "total_s": 600 }
+}
