@@ -4,7 +4,7 @@ Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 
 ## MVP — até 13/10 (P0)
 - [x] 01 Config em JSON e custo com horário de pico
-- [ ] 02 Provedor: cliente compatível com OpenAI + provedor falso
+- [x] 02 Provedor: cliente compatível com OpenAI + provedor falso
 - [ ] 03 Retry com backoff, jitter e Retry-After
 - [ ] 04 Roteador: semáforo, circuit breaker, fallback
 - [ ] 05 Cache LRU com TTL
