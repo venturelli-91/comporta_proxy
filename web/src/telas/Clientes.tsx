@@ -1,35 +1,43 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { api, enviar, usd, type Chave, type Cliente, type Modelo } from "../api";
+import { botao, botaoSecundario, botaoTexto, campo, cartao, IconeCopiar, IconeSeta, Selo } from "../ui";
 import { Estado } from "./Estado";
-
-const campo = "mt-1 block w-full rounded-md border border-borda bg-superficie px-3 py-2";
 
 export default function Clientes() {
   const clientes = useQuery({ queryKey: ["clientes"], queryFn: () => api<Cliente[]>("/admin/clientes") });
   const [aberto, setAberto] = useState<number | null>(null);
   if (!clientes.data) return <Estado q={clientes} />;
   return (
-    <div className="grid gap-10 lg:grid-cols-[1fr_20rem]">
+    <div className="grid items-start gap-10 lg:grid-cols-[1fr_22rem]">
       <section aria-labelledby="lista">
-        <h2 id="lista" className="mb-3 font-medium">Clientes</h2>
+        <h2 id="lista" className="mb-3 font-medium">
+          Clientes <span className="font-normal text-suave">({clientes.data.length})</span>
+        </h2>
         {clientes.data.length === 0 ? (
-          <p className="text-suave">Nenhum cliente ainda. Cadastre o primeiro ao lado para gerar uma chave.</p>
+          <p className={`${cartao} p-5 text-sm text-suave`}>
+            Nenhum cliente ainda. Cadastre o primeiro ao lado: cada aplicação recebe a própria chave <code className="font-mono">ck_</code>, com
+            limite e orçamento.
+          </p>
         ) : (
-          <ul className="divide-y divide-borda rounded-lg border border-borda bg-superficie">
+          <ul className={`${cartao} divide-y divide-borda overflow-hidden`}>
             {clientes.data.map((c) => (
-              <li key={c.id} className="px-4 py-3">
+              <li key={c.id}>
                 <button
-                  className="flex w-full flex-wrap items-baseline justify-between gap-2 text-left"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-realce"
                   aria-expanded={aberto === c.id}
                   onClick={() => setAberto(aberto === c.id ? null : c.id)}
                 >
-                  <span className="font-medium">{c.nome}</span>
-                  <span className="text-sm text-suave">
-                    {c.rpm ? `${c.rpm} req/min` : "sem limite"} ·{" "}
-                    {c.orcamento_micro ? `${usd(c.orcamento_micro)}/mês` : "sem orçamento"}
-                    {c.lgpd && " · LGPD"}
-                    {c.cache && " · cache"}
+                  <IconeSeta aberto={aberto === c.id} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{c.nome}</span>
+                    <span className="block text-sm text-suave">
+                      {c.rpm ? `${c.rpm} req/min` : "sem limite"} · {c.orcamento_micro ? `${usd(c.orcamento_micro)}/mês` : "sem orçamento"}
+                    </span>
+                  </span>
+                  <span className="flex flex-wrap justify-end gap-1.5">
+                    {c.lgpd && <Selo tom="ok">LGPD</Selo>}
+                    {c.cache && <Selo tom="neutro">cache</Selo>}
                   </span>
                 </button>
                 {aberto === c.id && <Chaves cliente={c} />}
@@ -67,51 +75,76 @@ function NovoCliente() {
     criar.mutate();
   };
   return (
-    <section aria-labelledby="novo">
-      <h2 id="novo" className="mb-3 font-medium">Novo cliente</h2>
-      <form onSubmit={enviarForm} className="space-y-3 text-sm">
-        <label className="block">
+    <section aria-labelledby="novo" className={`${cartao} p-5 lg:sticky lg:top-6`}>
+      <h2 id="novo" className="mb-4 font-medium">
+        Novo cliente
+      </h2>
+      <form onSubmit={enviarForm} className="space-y-4 text-sm">
+        <label className="block font-medium">
           Nome da aplicação
-          <input required value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} className={campo} />
+          <input required value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} placeholder="ex.: app-atendimento" className={`${campo} font-normal`} />
         </label>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
+          <label className="block font-medium">
             Requisições/min
-            <input type="number" min="0" value={f.rpm} onChange={(e) => setF({ ...f, rpm: e.target.value })} className={campo} />
+            <input type="number" min="0" value={f.rpm} onChange={(e) => setF({ ...f, rpm: e.target.value })} className={`${campo} font-normal`} />
           </label>
-          <label className="block">
+          <label className="block font-medium">
             Orçamento (US$/mês)
-            <input type="number" min="0" step="0.01" placeholder="sem limite" value={f.orcamento} onChange={(e) => setF({ ...f, orcamento: e.target.value })} className={campo} />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="sem limite"
+              value={f.orcamento}
+              onChange={(e) => setF({ ...f, orcamento: e.target.value })}
+              className={`${campo} font-normal`}
+            />
           </label>
         </div>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={f.lgpd} onChange={(e) => setF({ ...f, lgpd: e.target.checked })} />
-          Mascarar dados pessoais (CPF, e-mail, telefone…)
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={f.cache} onChange={(e) => setF({ ...f, cache: e.target.checked })} />
-          Reaproveitar respostas iguais (cache)
-        </label>
+        <div className="space-y-2">
+          <label className="flex items-start gap-2">
+            <input type="checkbox" className="mt-0.5" checked={f.lgpd} onChange={(e) => setF({ ...f, lgpd: e.target.checked })} />
+            <span>
+              Mascarar dados pessoais
+              <span className="block text-suave">CPF, CNPJ, e-mail, telefone e cartão nunca saem para o provedor.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" className="mt-0.5" checked={f.cache} onChange={(e) => setF({ ...f, cache: e.target.checked })} />
+            <span>
+              Reaproveitar respostas iguais
+              <span className="block text-suave">Pedidos idênticos respondem do cache, sem custo.</span>
+            </span>
+          </label>
+        </div>
         <fieldset>
-          <legend>Modelos liberados <span className="text-suave">(nenhum marcado = todos)</span></legend>
-          <div className="mt-1 flex flex-wrap gap-x-4">
+          <legend className="font-medium">
+            Modelos liberados <span className="font-normal text-suave">(nenhum marcado = todos)</span>
+          </legend>
+          <div className="mt-2 flex flex-wrap gap-2">
             {modelos.data?.map((m) => (
-              <label key={m.alias} className="flex items-center gap-1.5">
+              <label
+                key={m.alias}
+                className="flex items-center gap-1.5 rounded-md border border-borda px-2.5 py-1 hover:bg-realce has-checked:border-acento has-checked:bg-acento/8"
+              >
                 <input
                   type="checkbox"
                   checked={f.modelos.includes(m.alias)}
-                  onChange={(e) =>
-                    setF({ ...f, modelos: e.target.checked ? [...f.modelos, m.alias] : f.modelos.filter((x) => x !== m.alias) })
-                  }
+                  onChange={(e) => setF({ ...f, modelos: e.target.checked ? [...f.modelos, m.alias] : f.modelos.filter((x) => x !== m.alias) })}
                 />
                 {m.alias}
               </label>
             ))}
           </div>
         </fieldset>
-        {criar.isError && <p role="alert" className="text-erro">{criar.error.message}</p>}
-        <button disabled={criar.isPending} className="rounded-md bg-acento px-3 py-2 font-medium text-sobre-acento disabled:opacity-60 ">
-          Cadastrar cliente
+        {criar.isError && (
+          <p role="alert" className="text-erro">
+            {criar.error.message}
+          </p>
+        )}
+        <button disabled={criar.isPending} className={`${botao} w-full`}>
+          {criar.isPending ? "Cadastrando…" : "Cadastrar cliente"}
         </button>
       </form>
     </section>
@@ -140,47 +173,52 @@ function Chaves({ cliente }: { cliente: Cliente }) {
   });
 
   return (
-    <div className="mt-3 space-y-3 text-sm">
+    <div className="space-y-4 border-t border-borda bg-realce/60 px-4 py-4 pl-11 text-sm">
       {nova && (
-        <div role="status" className="rounded-md border border-acento p-3">
-          <p className="mb-2">Copie a chave agora. Ela não será mostrada de novo.</p>
+        <div role="status" className="rounded-md border border-acento/40 bg-acento/8 p-3">
+          <p className="mb-2 font-medium">Copie a chave agora: ela não será mostrada de novo.</p>
           <div className="flex gap-2">
-            <code className="min-w-0 flex-1 truncate rounded bg-fundo px-2 py-1">{nova}</code>
+            <code className="min-w-0 flex-1 truncate rounded border border-borda bg-superficie px-2 py-1.5 font-mono">{nova}</code>
             <button
-              className="rounded-md border border-borda px-2"
+              className={botaoSecundario}
               onClick={async () => {
                 await navigator.clipboard.writeText(nova);
                 setCopiada(true);
               }}
             >
+              <IconeCopiar />
               {copiada ? "Copiada" : "Copiar"}
             </button>
           </div>
         </div>
       )}
-      <ul className="space-y-1">
-        {chaves.data?.map((k) => (
-          <li key={k.id} className="flex items-center justify-between gap-3">
-            <code className={k.revogada_em ? "text-suave line-through" : ""}>{k.prefixo}</code>
-            {k.revogada_em ? (
-              <span className="text-suave">revogada</span>
-            ) : (
-              <button
-                className="text-erro hover:underline"
-                onClick={() => confirm(`Revogar ${k.prefixo}? Aplicações usando esta chave param na hora.`) && revogar.mutate(k.id)}
-              >
-                Revogar
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      <div className="flex gap-4">
-        <button className="text-acento hover:underline" onClick={() => gerar.mutate()}>
-          Gerar chave
+      <div>
+        <h3 className="mb-2 text-suave">Chaves</h3>
+        {chaves.data?.length === 0 && <p className="text-suave">Nenhuma chave. Gere uma para este cliente chamar a API.</p>}
+        <ul className="space-y-1.5">
+          {chaves.data?.map((k) => (
+            <li key={k.id} className="flex items-center justify-between gap-3">
+              <code className={`font-mono ${k.revogada_em ? "text-suave line-through" : ""}`}>{k.prefixo}</code>
+              {k.revogada_em ? (
+                <Selo tom="neutro">revogada</Selo>
+              ) : (
+                <button
+                  className={`${botaoTexto} text-erro`}
+                  onClick={() => confirm(`Revogar ${k.prefixo}? Aplicações usando esta chave param na hora.`) && revogar.mutate(k.id)}
+                >
+                  Revogar
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <button className={botaoSecundario} disabled={gerar.isPending} onClick={() => gerar.mutate()}>
+          {gerar.isPending ? "Gerando…" : "Gerar chave"}
         </button>
         <button
-          className="text-suave hover:text-erro"
+          className={`${botaoTexto} text-suave hover:text-erro`}
           onClick={() => confirm(`Remover ${cliente.nome} e todas as chaves? O histórico de uso continua.`) && remover.mutate()}
         >
           Remover cliente
