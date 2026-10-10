@@ -9,7 +9,7 @@ Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 - [x] M-5 revogar chave exige o cliente dono
 - [x] Cortes de stdlib da auditoria ponytail (`cmp.Or`, `slices.SortFunc`, sem struct `limitador`)
 
-Próximo: deploy no Cloud Run com o provedor falso (antes da entrevista).
+Demo pública: `render.yaml` + seed `DEMO_CHAVE` (10/10). Cloud Run fica para quando houver billing.
 
 ## MVP — até 13/10 (P0)
 - [x] 01 Config em JSON e custo com horário de pico
