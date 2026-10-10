@@ -11,3 +11,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 09/10 | 02 | `feat(provedor)` | Cliente único compatível com OpenAI; falso no mesmo protocolo; ponytail: ResponseController.Flush |
 | 09/10 | 03 | `feat(resiliencia)` | Equal jitter (piso de metade); Retry-After vence; desiste se não cabe no prazo |
 | 09/10 | 04 | `feat(gateway)` | Retry dentro do breaker; 4xx do cliente não abre o breaker; vaga do semáforo liberada no Close do corpo |
+| 09/10 | 05 | `feat(cache)` | LRU por bytes com container/list; expiração preguiçosa; mutex global (ponytail) |
