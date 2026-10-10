@@ -24,3 +24,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 09/10 | Segurança: ID reaproveitado | `fix(armazenamento)` | AUTOINCREMENT em clientes e chaves; bancos antigos precisam ser recriados (MVP sem dados de produção) |
 | 09/10 | Segurança: limite simultâneo por cliente | `fix(httpapi)` | 32 requisições abertas por chave (abaixo da concorrência do alias); acima disso 429 concorrencia_excedida |
 | 09/10 | Segurança: breaker compartilhado | `fix(gateway)` | prazo total do pedido não abre o breaker (só o watchdog conta); 401/402/403 do provedor fazem fallback |
+| 09/10 | Segurança: orçamento fail-open | `fix(gateway)` | config recusa modelo de destino/shadow sem preço; estouro por pedidos em voo limitado a 32 por cliente |

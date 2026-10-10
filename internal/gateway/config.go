@@ -113,6 +113,10 @@ func (c *Config) validar() error {
 			if _, ok := c.Provedores[d.Provedor]; !ok {
 				return fmt.Errorf("config: modelo %q usa provedor desconhecido %q", alias, d.Provedor)
 			}
+			// Sem preço a chamada custaria 0 e nunca consumiria o orçamento do cliente.
+			if _, ok := c.Precos[d.Modelo]; !ok {
+				return fmt.Errorf("config: modelo %q usa %q sem preço em \"precos\"", alias, d.Modelo)
+			}
 		}
 	}
 	return nil
