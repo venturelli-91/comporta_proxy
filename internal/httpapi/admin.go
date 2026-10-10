@@ -33,8 +33,9 @@ func (s *Servidor) rotasAdmin(mux *http.ServeMux) {
 }
 
 func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
-	lim := s.limiteLogin(ipDe(r))
-	if lim.Tokens() < 1 {
+	// Allow() confere e consome num passo só: tentativas paralelas não passam juntas pela checagem.
+	// O login certo também gasta um token; como o limite é por IP, o atacante não tranca o admin.
+	if !s.limiteLogin(ipDe(r)).Allow() {
 		retryAfter(w, time.Minute)
 		erro(w, http.StatusTooManyRequests, "muitas_tentativas", "muitas tentativas de login, aguarde um minuto")
 		return
@@ -42,7 +43,6 @@ func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	var v struct{ Token string }
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&v)
 	if s.d.AdminToken == "" || !iguais(v.Token, s.d.AdminToken) {
-		lim.Allow() // só tentativa errada consome
 		erro(w, http.StatusUnauthorized, "nao_autorizado", "token de admin inválido")
 		return
 	}
@@ -53,7 +53,7 @@ func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// limiteLogin: 5 tentativas erradas por IP, uma nova a cada 12 s. Por IP para que um
+// limiteLogin: 5 tentativas por IP, uma nova a cada 12 s. Por IP para que um
 // atacante não tranque o admin de verdade do lado de fora.
 // ponytail: mapa zerado ao passar de 10 mil IPs; LRU se isso virar alvo.
 func (s *Servidor) limiteLogin(ip string) *rate.Limiter {

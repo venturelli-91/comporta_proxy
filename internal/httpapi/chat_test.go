@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -622,8 +623,8 @@ func TestLogoutRevogaSessao(t *testing.T) {
 	}
 }
 
-// O limite de login é por IP e só conta tentativa errada: um atacante esgota o próprio
-// limite, mas não tranca o admin de verdade do lado de fora.
+// O limite de login é por IP: o login certo também consome, mas o atacante esgota só o
+// próprio limite e não tranca o admin de verdade, que entra de outro IP.
 func TestLoginLimitaTentativasSemTrancarOAdmin(t *testing.T) {
 	c := novoCenario(t)
 	var ultimo int
@@ -636,10 +637,32 @@ func TestLoginLimitaTentativasSemTrancarOAdmin(t *testing.T) {
 	if st := c.login(tokenAdmin, "X-Forwarded-For", "198.51.100.7").StatusCode; st != 204 {
 		t.Fatalf("admin em outro IP foi trancado pelo atacante: %d", st)
 	}
-	for range 6 {
-		if st := c.login(tokenAdmin, "X-Forwarded-For", "198.51.100.7").StatusCode; st != 204 {
-			t.Fatalf("login certo não pode consumir o limite: %d", st)
-		}
+}
+
+// 20 tentativas erradas ao mesmo tempo do mesmo IP: no máximo 5 podem chegar à comparação.
+// Com checar-e-depois-consumir, todas passavam pela checagem antes de alguma consumir.
+func TestLoginParaleloRespeitaLimite(t *testing.T) {
+	c := novoCenario(t)
+	var wg sync.WaitGroup
+	var comparadas atomic.Int32
+	for range 20 {
+		wg.Go(func() {
+			req, _ := http.NewRequest("POST", c.url+"/admin/login", strings.NewReader(`{"token":"chute"}`))
+			req.Header.Set("X-Forwarded-For", "203.0.113.9")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Error(err) // t.Fatal não pode ser chamado fora da goroutine do teste
+				return
+			}
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusUnauthorized {
+				comparadas.Add(1)
+			}
+		})
+	}
+	wg.Wait()
+	if n := comparadas.Load(); n > 5 {
+		t.Fatalf("%d tentativas chegaram à comparação; o limite é 5", n)
 	}
 }
 
