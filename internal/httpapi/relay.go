@@ -163,6 +163,14 @@ func restaurarChunk(dado []byte, sts map[string]*lgpd.Stream) []byte {
 				delta[campo] = st.Escrever(t)
 			}
 		}
+		// A resposta começou: o raciocínio acabou. O que ficou retido no restaurador (um "[" sem
+		// "]") sai neste chunk, antes do content, em vez de no chunk extra do fim.
+		if _, ok := delta["content"].(string); ok {
+			if resto := sts["reasoning_content"].Finalizar(); resto != "" {
+				r, _ := delta["reasoning_content"].(string)
+				delta["reasoning_content"] = r + resto
+			}
+		}
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
