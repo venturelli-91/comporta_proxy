@@ -561,3 +561,24 @@ func TestShadowLimitado(t *testing.T) {
 		t.Fatal("descarte de shadow não foi contado")
 	}
 }
+
+// Um cliente não pode ocupar todas as vagas do modelo: passa do limite próprio e leva 429,
+// enquanto os outros clientes continuam atendidos.
+func TestLimiteSimultaneoPorCliente(t *testing.T) {
+	c := novoCenario(t)
+	c.s.porCliente = 1
+	c.falso.PorToken = 30 * time.Millisecond
+	_, guloso := c.novoCliente(armazenamento.Cliente{Nome: "guloso"})
+	_, outro := c.novoCliente(armazenamento.Cliente{Nome: "outro"})
+	resp := c.chat(guloso, msg("rapido", strings.Repeat("palavra ", 30), true))
+	defer resp.Body.Close()
+	_, _ = bufio.NewReader(resp.Body).ReadString('\n') // stream aberto, vaga ocupada
+
+	segundo := c.chat(guloso, msg("rapido", "oi", false))
+	if segundo.StatusCode != 429 || segundo.Header.Get("Retry-After") == "" || erroCodigo(t, segundo) != "concorrencia_excedida" {
+		t.Fatalf("segunda requisição simultânea do mesmo cliente: status %d", segundo.StatusCode)
+	}
+	if got := conteudo(t, c.chat(outro, msg("rapido", "oi", false))); got != "Resposta do m1: oi" {
+		t.Fatalf("outro cliente foi afetado: %q", got)
+	}
+}

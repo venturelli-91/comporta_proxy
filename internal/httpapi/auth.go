@@ -58,6 +58,26 @@ func (s *Servidor) permitir(cli armazenamento.Cliente) (bool, time.Duration) {
 	return true, 0
 }
 
+// ocupar reserva uma das vagas simultâneas do cliente; soltar devolve.
+// ponytail: limite único para todos os clientes; vira coluna do cliente quando algum precisar de mais.
+func (s *Servidor) ocupar(cliente int64) bool {
+	s.limMu.Lock()
+	defer s.limMu.Unlock()
+	if s.emCurso[cliente] >= s.porCliente {
+		return false
+	}
+	s.emCurso[cliente]++
+	return true
+}
+
+func (s *Servidor) soltar(cliente int64) {
+	s.limMu.Lock()
+	defer s.limMu.Unlock()
+	if s.emCurso[cliente]--; s.emCurso[cliente] <= 0 {
+		delete(s.emCurso, cliente)
+	}
+}
+
 func retryAfter(w http.ResponseWriter, d time.Duration) {
 	w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(d.Seconds()))))
 }

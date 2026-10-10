@@ -49,6 +49,12 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Admissão antes de qualquer trabalho caro.
+	if !s.ocupar(p.cli.ID) {
+		retryAfter(w, time.Second)
+		s.falhar(w, p, http.StatusTooManyRequests, "concorrencia_excedida", "requisições simultâneas demais para esta chave")
+		return
+	}
+	defer s.soltar(p.cli.ID)
 	if ok, espera := s.permitir(p.cli); !ok {
 		retryAfter(w, espera)
 		s.falhar(w, p, http.StatusTooManyRequests, "limite_excedido", "limite de requisições por minuto excedido")

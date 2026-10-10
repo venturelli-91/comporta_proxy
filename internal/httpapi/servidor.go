@@ -53,6 +53,10 @@ type Servidor struct {
 
 	limMu   sync.Mutex
 	limites map[int64]limitador
+	// emCurso conta as requisições abertas por cliente. Com porCliente abaixo da concorrência
+	// do modelo, um cliente sozinho (ou com streams longos) não esgota as vagas de todos.
+	emCurso    map[int64]int
+	porCliente int
 
 	gastoMu  sync.Mutex
 	gastoMes string
@@ -73,6 +77,7 @@ func Novo(d Deps) (*Servidor, error) {
 	t := d.Config.Timeouts
 	s := &Servidor{
 		d: d, limites: map[int64]limitador{}, sombras: make(chan struct{}, 16),
+		emCurso: map[int64]int{}, porCliente: 32,
 		primeiroToken: padrao(t.PrimeiroToken(), 30*time.Second),
 		entreChunks:   padrao(t.EntreChunks(), 60*time.Second),
 		total:         padrao(t.Total(), 10*time.Minute),
