@@ -11,7 +11,7 @@ paga duas vezes, o provedor que cai e o dado pessoal que vaza para fora do país
 Uma instância pública roda na Render (plano gratuito), com o **provedor falso**: nada chega a uma IA de
 verdade, então não há custo nem dado real.
 
-1. Abra a demo e entre com o token **`demo-comporta`**.
+1. Abra **[comporta.onrender.com](https://comporta.onrender.com)** e entre com o token **`demo-comporta`**.
 2. Vá em **Playground**, cole a chave **`ck_demo_comporta`** e mande algo como
    `meu CPF é 529.982.247-25 e o e-mail ana@exemplo.com`.
 3. A resposta volta com os dados originais, mas o provedor só viu `[CPF_1]` e `[EMAIL_1]`. A **Visão geral**
@@ -20,7 +20,7 @@ verdade, então não há custo nem dado real.
 Pela API, com qualquer SDK compatível com OpenAI:
 
 ```bash
-curl https://<demo>/v1/chat/completions -H "Authorization: Bearer ck_demo_comporta" \
+curl https://comporta.onrender.com/v1/chat/completions -H "Authorization: Bearer ck_demo_comporta" \
   -d '{"model":"rapido","messages":[{"role":"user","content":"meu CPF é 529.982.247-25"}]}'
 ```
 
