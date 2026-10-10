@@ -33,8 +33,9 @@ func (s *Servidor) rotasAdmin(mux *http.ServeMux) {
 }
 
 func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
-	lim := s.limiteLogin(ipDe(r))
-	if lim.Tokens() < 1 {
+	// Allow() confere e consome num passo só: tentativas paralelas não passam juntas pela checagem.
+	// O login certo também gasta um token; como o limite é por IP, o atacante não tranca o admin.
+	if !s.limiteLogin(s.ipDe(r)).Allow() {
 		retryAfter(w, time.Minute)
 		erro(w, http.StatusTooManyRequests, "muitas_tentativas", "muitas tentativas de login, aguarde um minuto")
 		return
@@ -42,7 +43,6 @@ func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	var v struct{ Token string }
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&v)
 	if s.d.AdminToken == "" || !iguais(v.Token, s.d.AdminToken) {
-		lim.Allow() // só tentativa errada consome
 		erro(w, http.StatusUnauthorized, "nao_autorizado", "token de admin inválido")
 		return
 	}
@@ -53,14 +53,19 @@ func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// limiteLogin: 5 tentativas erradas por IP, uma nova a cada 12 s. Por IP para que um
+// limiteLogin: 5 tentativas por IP, uma nova a cada 12 s. Por IP para que um
 // atacante não tranque o admin de verdade do lado de fora.
-// ponytail: mapa zerado ao passar de 10 mil IPs; LRU se isso virar alvo.
+// ponytail: a poda varre o mapa e só tira os cheios; com 10 mil IPs gastos ao mesmo tempo o
+// mapa cresce e cada login fica O(n). LRU com teto se isso virar alvo.
 func (s *Servidor) limiteLogin(ip string) *rate.Limiter {
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	if len(s.tentativas) > 10_000 {
-		s.tentativas = map[string]*rate.Limiter{}
+		for k, l := range s.tentativas {
+			if l.Tokens() >= float64(l.Burst()) { // cheio = igual a um novo, não guarda nada
+				delete(s.tentativas, k)
+			}
+		}
 	}
 	l, ok := s.tentativas[ip]
 	if !ok {
@@ -70,14 +75,12 @@ func (s *Servidor) limiteLogin(ip string) *rate.Limiter {
 	return l
 }
 
-// ipDe usa a última entrada do X-Forwarded-For, que é a que o proxy confiável (o front-end do
-// Cloud Run) acrescenta; o cliente só consegue forjar as anteriores. Sem proxy na frente, o
-// cabeçalho inteiro é forjável e o limite vira só um obstáculo: a proteção real é o token
-// ter entropia alta (o gerado pelo binário tem 128 bits).
-func ipDe(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		partes := strings.Split(xff, ",")
-		return strings.TrimSpace(partes[len(partes)-1])
+// ipDe usa a última entrada do X-Forwarded-For, a que o proxy confiável (o front-end do Cloud
+// Run) acrescenta; o cliente só forja as anteriores. Sem esse proxy o cabeçalho inteiro é do
+// cliente, que ganharia um balde novo a cada tentativa: aí vale o endereço da conexão.
+func (s *Servidor) ipDe(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); s.d.ConfiarProxy && xff != "" {
+		return strings.TrimSpace(xff[strings.LastIndex(xff, ",")+1:])
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -200,8 +203,12 @@ func (s *Servidor) criarChave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Servidor) revogarChave(w http.ResponseWriter, r *http.Request) {
+	cliente, ok := idDe(w, r, "id")
+	if !ok {
+		return
+	}
 	if id, ok := idDe(w, r, "chave"); ok {
-		s.mutou(w, r, s.d.Banco.RevogarChave(r.Context(), id), http.StatusNoContent, nil)
+		s.mutou(w, r, s.d.Banco.RevogarChave(r.Context(), cliente, id), http.StatusNoContent, nil)
 	}
 }
 

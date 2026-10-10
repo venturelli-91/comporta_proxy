@@ -3,6 +3,7 @@
 package httpapi
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -32,6 +33,9 @@ type Deps struct {
 	AdminToken string
 	Painel     fs.FS // nil = sem painel
 	Log        *slog.Logger
+	// ConfiarProxy: há um proxy na frente (Cloud Run) que acrescenta o IP real ao X-Forwarded-For.
+	// Sem ele, o cabeçalho é do cliente e não serve para identificar ninguém.
+	ConfiarProxy bool
 }
 
 // snapshot é tudo que a autenticação lê em cada requisição. É trocado inteiro (atomic.Pointer)
@@ -52,7 +56,7 @@ type Servidor struct {
 	sombras chan struct{}
 
 	limMu   sync.Mutex
-	limites map[int64]limitador
+	limites map[int64]*rate.Limiter
 	// emCurso conta as requisições abertas por cliente. Com porCliente abaixo da concorrência
 	// do modelo, um cliente sozinho (ou com streams longos) não esgota as vagas de todos.
 	emCurso    map[int64]int
@@ -69,23 +73,18 @@ type Servidor struct {
 	primeiroToken, entreChunks, total time.Duration
 }
 
-type limitador struct {
-	rpm int
-	l   *rate.Limiter
-}
-
 func Novo(d Deps) (*Servidor, error) {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
 	t := d.Config.Timeouts
 	s := &Servidor{
-		d: d, limites: map[int64]limitador{}, sombras: make(chan struct{}, 16),
+		d: d, limites: map[int64]*rate.Limiter{}, sombras: make(chan struct{}, 16),
 		emCurso: map[int64]int{}, porCliente: 32,
 		sessoes: map[string]time.Time{}, tentativas: map[string]*rate.Limiter{},
-		primeiroToken: padrao(t.PrimeiroToken(), 30*time.Second),
-		entreChunks:   padrao(t.EntreChunks(), 60*time.Second),
-		total:         padrao(t.Total(), 10*time.Minute),
+		primeiroToken: cmp.Or(t.PrimeiroToken(), 30*time.Second),
+		entreChunks:   cmp.Or(t.EntreChunks(), 60*time.Second),
+		total:         cmp.Or(t.Total(), 10*time.Minute),
 	}
 	ctx := context.Background()
 	if err := s.Recarregar(ctx); err != nil {
@@ -100,13 +99,6 @@ func Novo(d Deps) (*Servidor, error) {
 	}
 	s.gasto, s.gastoMes = gasto, agora.Format("2006-01")
 	return s, nil
-}
-
-func padrao(d, p time.Duration) time.Duration {
-	if d > 0 {
-		return d
-	}
-	return p
 }
 
 // Recarregar relê clientes e chaves e troca o snapshot.
@@ -209,9 +201,7 @@ func (s *Servidor) base(h http.Handler) http.Handler {
 }
 
 func erro(w http.ResponseWriter, status int, codigo, mensagem string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{"erro": map[string]string{"codigo": codigo, "mensagem": mensagem}})
+	responderJSON(w, status, map[string]any{"erro": map[string]string{"codigo": codigo, "mensagem": mensagem}})
 }
 
 func responderJSON(w http.ResponseWriter, status int, v any) {

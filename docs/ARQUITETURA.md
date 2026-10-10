@@ -162,7 +162,7 @@ Escrita em lote (ex.: a cada 500 eventos ou 1 s). Agregação feita no mesmo lot
 - **Vite + React + TypeScript**, React Router, **TanStack Query** (cache de dados do servidor e atualização a cada poucos segundos), **Recharts** para os gráficos, Tailwind + shadcn/ui para não perder tempo com componentes base.
 - Telas: visão geral (gasto, economia, p95, taxa de erro), clientes e chaves (criar, revogar, mostrar a chave uma única vez), uso detalhado com filtros, estado dos provedores (breaker), playground.
 - **Playground:** `fetch` com `ReadableStream` para ler o SSE de um POST autenticado; mostrar separadamente o raciocínio (`reasoning_content`) e a resposta, o tempo até o primeiro token e o custo da chamada.
-- **Autenticação do admin:** login com o `ADMIN_TOKEN` → cookie de sessão `HttpOnly; Secure; SameSite=Strict`. O token nunca fica no `localStorage`.
+- **Autenticação do admin:** login com o `ADMIN_TOKEN` → cookie de sessão `HttpOnly; Secure; SameSite=Strict`. O token nunca fica no `localStorage`. Login limitado a 5 tentativas por IP (consumidas na entrada); o IP vem do último `X-Forwarded-For` só com `K_SERVICE` ou `TRUST_PROXY=1`, senão do endereço da conexão.
 - **Build:** `web/dist` embutido no binário Go com `//go:embed`; o Go serve os arquivos e faz fallback para `index.html` nas rotas do React.
 
 ## 13. Testes

@@ -165,8 +165,10 @@ func (b *Banco) CriarChave(ctx context.Context, clienteID int64) (string, Chave,
 	return texto, k, err
 }
 
-func (b *Banco) RevogarChave(ctx context.Context, id int64) error {
-	res, err := b.db.ExecContext(ctx, `UPDATE chaves SET revogada_em = ? WHERE id = ? AND revogada_em IS NULL`, time.Now().Unix(), id)
+// RevogarChave só revoga a chave se ela for do cliente: o id do cliente vem do path do admin.
+func (b *Banco) RevogarChave(ctx context.Context, clienteID, id int64) error {
+	res, err := b.db.ExecContext(ctx, `UPDATE chaves SET revogada_em = ? WHERE id = ? AND cliente_id = ? AND revogada_em IS NULL`,
+		time.Now().Unix(), id, clienteID)
 	return linhaAfetada(res, err, "revogando chave")
 }
 

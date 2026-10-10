@@ -113,7 +113,7 @@ k6 run carga/carga.js                 # contra o provedor falso
 docker compose up
 ```
 
-Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_PATH`.
+Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_PATH`, `TRUST_PROXY` (=1 atrás de proxy confiável; no Cloud Run o `K_SERVICE` já basta).
 
 ## Regras de segurança (não negociáveis)
 
@@ -208,7 +208,9 @@ Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_
   garante `Restaurar(Mascarar(s)) == s`, provado por fuzz.
 - **Shadow só no caminho sem cache:** comparar uma resposta reaproveitada não mede nada e paga uma chamada.
 - **Singleflight com `context.WithoutCancel`:** o líder desconectar não derruba quem espera a mesma resposta.
-- **Cookie do admin guarda o hash do token**, `HttpOnly; SameSite=Strict`; comparação em tempo constante.
+- **Cookie do admin é uma sessão aleatória** (o servidor guarda só o hash, logout revoga), `HttpOnly; SameSite=Strict`; token comparado em tempo constante.
+- **Login limitado por IP, consumido na entrada:** `Allow()` confere e gasta num passo só (sem corrida entre tentativas paralelas).
+- **XFF só atrás de proxy confiável** (`K_SERVICE`/`TRUST_PROXY=1`): sem proxy o cabeçalho é do cliente e daria um balde novo a cada tentativa.
 - **Commits em português (Conventional Commits)** neste repositório, prevalecendo sobre a regra global.
 
 ## Pitch de 30 segundos para a entrevista

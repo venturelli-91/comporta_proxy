@@ -46,12 +46,12 @@ func (s *Servidor) permitir(cli armazenamento.Cliente) (bool, time.Duration) {
 	}
 	s.limMu.Lock()
 	l, ok := s.limites[cli.ID]
-	if !ok || l.rpm != cli.RPM {
-		l = limitador{cli.RPM, rate.NewLimiter(rate.Limit(float64(cli.RPM)/60), cli.RPM)}
+	if !ok || l.Burst() != cli.RPM { // o burst é o próprio RPM: se mudou no admin, recria
+		l = rate.NewLimiter(rate.Limit(float64(cli.RPM)/60), cli.RPM)
 		s.limites[cli.ID] = l
 	}
 	s.limMu.Unlock()
-	res := l.l.Reserve()
+	res := l.Reserve()
 	if d := res.Delay(); d > 0 {
 		res.Cancel()
 		return false, d
