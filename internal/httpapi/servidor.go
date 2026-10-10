@@ -48,9 +48,12 @@ type snapshot struct {
 type Servidor struct {
 	d    Deps
 	snap atomic.Pointer[snapshot]
-	sf   singleflight.Group
-	met  contadores
-	bg   sync.WaitGroup // shadows em andamento
+	// recMu serializa Recarregar; antesDeTrocar é um gancho só de teste (nil em produção).
+	recMu         sync.Mutex
+	antesDeTrocar func()
+	sf            singleflight.Group
+	met           contadores
+	bg            sync.WaitGroup // shadows em andamento
 	// sombras limita os shadows simultâneos: tráfego de comparação não pode disputar o limite
 	// de concorrência da conta com o tráfego real. Sem vaga, o shadow é descartado e contado.
 	sombras chan struct{}
@@ -101,8 +104,12 @@ func Novo(d Deps) (*Servidor, error) {
 	return s, nil
 }
 
-// Recarregar relê clientes e chaves e troca o snapshot.
+// Recarregar relê clientes e chaves e troca o snapshot. A leitura e a troca acontecem sob o
+// mesmo lock: sem isso, um Recarregar que leu antes de uma revogação poderia gravar depois
+// de quem leu depois dela, e a chave revogada voltaria a valer.
 func (s *Servidor) Recarregar(ctx context.Context) error {
+	s.recMu.Lock()
+	defer s.recMu.Unlock()
 	clientes, err := s.d.Banco.ListarClientes(ctx)
 	if err != nil {
 		return err
@@ -114,6 +121,9 @@ func (s *Servidor) Recarregar(ctx context.Context) error {
 	sn := &snapshot{chaves: chaves, clientes: map[int64]armazenamento.Cliente{}}
 	for _, c := range clientes {
 		sn.clientes[c.ID] = c
+	}
+	if s.antesDeTrocar != nil {
+		s.antesDeTrocar()
 	}
 	s.snap.Store(sn)
 	return nil
