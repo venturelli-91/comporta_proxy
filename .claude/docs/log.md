@@ -13,3 +13,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 09/10 | 04 | `feat(gateway)` | Retry dentro do breaker; 4xx do cliente não abre o breaker; vaga do semáforo liberada no Close do corpo |
 | 09/10 | 05 | `feat(cache)` | LRU por bytes com container/list; expiração preguiçosa; mutex global (ponytail) |
 | 09/10 | 06 | `feat(lgpd)` | DV de CPF/CNPJ e Luhn; marcador nunca colide com texto do usuário; fuzz 500k+3,2M execs ok |
+| 09/10 | 07 | `feat(armazenamento)` | Chave rand.Text 128 bits só como SHA-256; lote 500/1s drenado no shutdown; p95 por OFFSET |
