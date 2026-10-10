@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -114,6 +115,12 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 		}
 		p.ev.PII = p.mapa.Len()
 		s.met.pii.Add(int64(p.ev.PII))
+		// O Playground mostra lado a lado o que o provedor recebeu e o que voltou. Seguro de devolver:
+		// o texto já está mascarado e é a mensagem do próprio cliente. Base64 porque cabeçalho só
+		// aceita ASCII; corte em 2 KB porque proxies na frente limitam o tamanho dos cabeçalhos.
+		if t := ultimaDoUsuario(p.corpo); t != "" {
+			w.Header().Set("X-Comporta-Enviado", base64.StdEncoding.EncodeToString([]byte(t)))
+		}
 	}
 	if p.stream {
 		// Sem include_usage o stream não traz usage e o custo ficaria desconhecido. Os outros

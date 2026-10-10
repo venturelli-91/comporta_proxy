@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/venturelli-91/comporta_proxy/internal/gateway"
@@ -222,4 +223,19 @@ func mascararMensagens(corpo map[string]json.RawMessage, mapa *lgpd.Mapa) error 
 	b, err := json.Marshal(msgs)
 	corpo["messages"] = b
 	return err
+}
+
+// ultimaDoUsuario devolve o texto da última mensagem "user" (até 2 KB, sem partir um caractere).
+func ultimaDoUsuario(corpo map[string]json.RawMessage) string {
+	var msgs []struct{ Role, Content string }
+	_ = json.Unmarshal(corpo["messages"], &msgs) // content em partes (multimodal) fica vazio
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if t := msgs[i].Content; msgs[i].Role == "user" && t != "" {
+			if len(t) > 2048 {
+				t = strings.ToValidUTF8(t[:2048], "")
+			}
+			return t
+		}
+	}
+	return ""
 }
