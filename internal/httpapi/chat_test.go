@@ -89,7 +89,16 @@ func novoCenario(t testing.TB) *cenario {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(bytes.Repeat([]byte("a"), maxResposta+1))
 	})
-	servidores := map[string]http.Handler{"gigante": gigante, "falso": c.espiao, "ruim": &provedor.Falso{TaxaErro: 1}, "lento": lento, "mudo": mudo}
+	// pensador manda o raciocínio com o marcador [CPF_1] partido entre dois chunks, como a DeepSeek.
+	pensador := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, d := range []string{`{"reasoning_content":"o CPF é [CP"}`, `{"reasoning_content":"F_1] mesmo"}`, `{"content":"ok"}`} {
+			fmt.Fprintf(w, "data: {\"choices\":[{\"index\":0,\"delta\":%s}]}\n\n", d)
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	})
+	servidores := map[string]http.Handler{"pensador": pensador, "gigante": gigante, "falso": c.espiao, "ruim": &provedor.Falso{TaxaErro: 1}, "lento": lento, "mudo": mudo}
 	clientes := map[string]*provedor.Cliente{}
 	provs := map[string]gateway.ProvedorCfg{}
 	for nome, h := range servidores {
@@ -107,6 +116,7 @@ func novoCenario(t testing.TB) *cenario {
 			"travado":  {Destinos: []gateway.Destino{{Provedor: "lento", Modelo: "m1"}}, Concorrencia: 100},
 			"calado":   {Destinos: []gateway.Destino{{Provedor: "mudo", Modelo: "m1"}}, Concorrencia: 100},
 			"enorme":   {Destinos: []gateway.Destino{{Provedor: "gigante", Modelo: "m1"}}, Concorrencia: 100},
+			"pensa":    {Destinos: []gateway.Destino{{Provedor: "pensador", Modelo: "m1"}}, Concorrencia: 100},
 		},
 		Precos: map[string]gateway.PrecoCfg{"m1": {EntradaCacheMiss: 100, Saida: 1000}, "m2": {EntradaCacheMiss: 200, Saida: 2000}},
 	}
@@ -725,5 +735,35 @@ func TestRespostaGrandeVira502(t *testing.T) {
 				t.Fatal("resposta cortada entrou no cache")
 			}
 		})
+	}
+}
+
+// O raciocínio da DeepSeek vem em delta.reasoning_content, com marcadores partidos entre
+// chunks como o content: tem de chegar ao cliente restaurado.
+func TestStreamRestauraRaciocinio(t *testing.T) {
+	c := novoCenario(t)
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja", LGPD: true})
+	resp := c.chat(chave, msg("pensa", "meu CPF é 529.982.247-25", true))
+	defer resp.Body.Close()
+	var raciocinio strings.Builder
+	sc := bufio.NewScanner(resp.Body)
+	for sc.Scan() {
+		dado, ok := strings.CutPrefix(sc.Text(), "data: ")
+		if !ok || dado == "[DONE]" {
+			continue
+		}
+		var v struct {
+			Choices []struct {
+				Delta struct {
+					Reasoning string `json:"reasoning_content"`
+				}
+			}
+		}
+		if json.Unmarshal([]byte(dado), &v) == nil && len(v.Choices) > 0 {
+			raciocinio.WriteString(v.Choices[0].Delta.Reasoning)
+		}
+	}
+	if got := raciocinio.String(); got != "o CPF é 529.982.247-25 mesmo" {
+		t.Fatalf("raciocínio = %q", got)
 	}
 }
