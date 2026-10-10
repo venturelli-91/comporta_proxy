@@ -105,6 +105,10 @@ func (c *Config) validar() error {
 	if len(c.Modelos) == 0 {
 		return fmt.Errorf("config: nenhum modelo")
 	}
+	// Zero = usar o padrão; negativo faria os prazos vencerem na hora e toda requisição dar 504.
+	if t := c.Timeouts; min(t.ConexaoS, t.PrimeiroTokenS, t.EntreChunksS, t.TotalS) < 0 {
+		return fmt.Errorf("config: timeout negativo em \"timeouts\"")
+	}
 	for alias, m := range c.Modelos {
 		if len(m.Destinos) == 0 {
 			return fmt.Errorf("config: modelo %q sem destinos", alias)

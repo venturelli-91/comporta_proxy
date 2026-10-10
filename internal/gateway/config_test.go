@@ -16,6 +16,8 @@ func TestCarregar(t *testing.T) {
 		{"destino sem preço", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}}}`, "sem preço"},
 		{"shadow sem preço", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}],"shadow":{"provedor":"p","modelo":"s"}}},"precos":{"m":{"saida":1}}}`, "sem preço"},
 		{"provedor desconhecido", `{"provedores":{},"modelos":{"a":{"destinos":[{"provedor":"x","modelo":"m"}]}},"precos":{"m":{"saida":1}}}`, "provedor desconhecido"},
+		// Timeout negativo faria o watchdog disparar na hora: toda requisição viraria 504.
+		{"timeout negativo", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}},"precos":{"m":{"saida":1}},"timeouts":{"primeiro_token_s":-1}}`, "timeout negativo"},
 		{"alias sem destino", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[]}}}`, "sem destinos"},
 	}
 	for _, c := range casos {
