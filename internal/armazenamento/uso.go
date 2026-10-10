@@ -3,6 +3,7 @@ package armazenamento
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 	"time"
 )
@@ -60,7 +61,11 @@ func (g *Gravador) Rodar(ctx context.Context) {
 		// Contexto próprio: o lote final é gravado mesmo com o ctx de Rodar já cancelado.
 		c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = g.b.gravar(c, lote)
+		if err := g.b.gravar(c, lote); err != nil {
+			// Lote perdido conta como descartado: aparece no /metrics junto com o canal cheio.
+			g.descartados.Add(int64(len(lote)))
+			slog.Error("gravando uso", "eventos", len(lote), "erro", err.Error())
+		}
 		lote = lote[:0]
 	}
 	for {

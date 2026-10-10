@@ -26,6 +26,7 @@ import (
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(log) // pacotes sem logger próprio (gravador de uso) também saem em JSON
 	if err := rodar(log); err != nil {
 		log.Error("encerrando", "erro", err.Error())
 		os.Exit(1)
