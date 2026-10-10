@@ -736,6 +736,10 @@ func TestRespostaGrandeVira502(t *testing.T) {
 			if c.s.d.Cache.Bytes() != 0 {
 				t.Fatal("resposta cortada entrou no cache")
 			}
+			// O provedor cobrou a resposta inteira: o orçamento precisa ver um custo, mesmo estimado.
+			if r := c.relatorio(); r.Total.CustoMicro == 0 {
+				t.Fatal("resposta grande registrada com custo zero")
+			}
 		})
 	}
 }

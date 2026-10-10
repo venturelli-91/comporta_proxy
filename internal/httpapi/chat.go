@@ -29,6 +29,13 @@ const (
 
 var errRespostaGrande = errors.New("resposta do provedor acima de 16 MiB")
 
+// usoEstimado: o provedor cobrou mas o usage não chegou (stream cortado, resposta acima do teto).
+// ~4 bytes por token na entrada; a saída vem de quem chama, para o orçamento valer.
+// ponytail: sem marcar o evento como estimado; coluna nova quando o painel precisar.
+func usoEstimado(p *pedido, saida int64) gateway.Uso {
+	return gateway.Uso{PromptTokens: int64(len(p.corpo["messages"]) / 4), CompletionTokens: saida}
+}
+
 // lerResposta lê a resposta inteira até o teto. Lê 1 byte a mais para distinguir "coube" de
 // "foi cortada": cortada vira erro (502), nunca uma resposta 200 incompleta ou um item de cache.
 func lerResposta(r io.Reader) ([]byte, error) {
@@ -155,16 +162,16 @@ func (s *Servidor) direto(w http.ResponseWriter, r *http.Request, p *pedido) {
 		v.r = resp.Body
 		uso, err = s.relaySSE(ctx, w, v, p)
 		if uso == (gateway.Uso{}) {
-			// Stream cortado antes do chunk de usage: o provedor cobra mesmo assim. Estima
-			// (~4 bytes por token na entrada, ~1 token por chunk na saída) para o orçamento valer.
-			// ponytail: sem marcar o evento como estimado; coluna nova quando o painel precisar.
-			uso.PromptTokens, uso.CompletionTokens = int64(len(p.corpo["messages"])/4), p.chunks
+			// Stream cortado antes do chunk de usage: o provedor cobra mesmo assim (~1 token por chunk).
+			uso = usoEstimado(p, p.chunks)
 		}
 	} else {
 		var b []byte
 		if b, err = lerResposta(resp.Body); err == nil {
 			uso = usoDe(b, false)
 			s.responderCorpo(w, p, b)
+		} else if errors.Is(err, errRespostaGrande) {
+			uso = usoEstimado(p, maxResposta/4) // o provedor cobrou a resposta inteira
 		}
 	}
 	if err != nil {
@@ -220,6 +227,9 @@ func (s *Servidor) comCache(w http.ResponseWriter, r *http.Request, p *pedido) {
 		}
 		corpo, err := lerResposta(leitor)
 		if err != nil {
+			if errors.Is(err, errRespostaGrande) {
+				s.cobrar(p, dest, usoEstimado(p, maxResposta/4)) // o líder paga o que o provedor cobrou
+			}
 			return nil, causa(ctx, err)
 		}
 		uso := usoDe(corpo, p.stream)
