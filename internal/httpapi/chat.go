@@ -35,6 +35,9 @@ type pedido struct {
 	stream bool
 	mapa   *lgpd.Mapa
 	ev     armazenamento.Evento
+
+	pediuUso bool // o cliente pediu stream_options.include_usage
+	chunks   int64
 }
 
 func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
@@ -88,8 +91,13 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 		s.met.pii.Add(int64(p.ev.PII))
 	}
 	if p.stream {
-		// Sem isso o stream não traz usage e o custo da chamada ficaria desconhecido.
-		p.corpo["stream_options"] = json.RawMessage(`{"include_usage":true}`)
+		// Sem include_usage o stream não traz usage e o custo ficaria desconhecido. Os outros
+		// campos de stream_options do cliente são mantidos.
+		opcoes := map[string]any{}
+		_ = json.Unmarshal(p.corpo["stream_options"], &opcoes)
+		p.pediuUso = opcoes["include_usage"] == true
+		opcoes["include_usage"] = true
+		p.corpo["stream_options"], _ = json.Marshal(opcoes)
 	}
 	if p.cli.Cache || r.Header.Get("X-Comporta-Cache") == "ligado" {
 		s.comCache(w, r, p)
@@ -105,15 +113,20 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 // direto: sem cache. Com stream, repassa ao vivo; o contexto da requisição vai até o
 // provedor, então um cliente que desconecta cancela a chamada paga.
 func (s *Servidor) direto(w http.ResponseWriter, r *http.Request, p *pedido) {
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-	if !p.stream {
-		ctx, cancel = context.WithTimeout(ctx, s.total)
-		defer cancel()
+	ctx, cancel := context.WithCancelCause(r.Context())
+	defer cancel(nil)
+	var v *vigia
+	if p.stream {
+		v = s.novaVigia(cancel)
+		defer v.parar()
+	} else {
+		var fim context.CancelFunc
+		ctx, fim = context.WithTimeout(ctx, s.total)
+		defer fim()
 	}
 	resp, dest, err := s.d.Roteador.Chamar(ctx, p.alias, p.corpo)
 	if err != nil {
-		s.erroProvedor(w, p, err)
+		s.erroProvedor(w, p, causa(ctx, err))
 		return
 	}
 	defer resp.Body.Close()
@@ -121,7 +134,14 @@ func (s *Servidor) direto(w http.ResponseWriter, r *http.Request, p *pedido) {
 
 	var uso gateway.Uso
 	if p.stream {
-		uso, err = s.relaySSE(ctx, w, resp.Body, p, true)
+		v.r = resp.Body
+		uso, err = s.relaySSE(ctx, w, v, p)
+		if uso == (gateway.Uso{}) {
+			// Stream cortado antes do chunk de usage: o provedor cobra mesmo assim. Estima
+			// (~4 bytes por token na entrada, ~1 token por chunk na saída) para o orçamento valer.
+			// ponytail: sem marcar o evento como estimado; coluna nova quando o painel precisar.
+			uso.PromptTokens, uso.CompletionTokens = int64(len(p.corpo["messages"])/4), p.chunks
+		}
 	} else {
 		var b []byte
 		if b, err = io.ReadAll(io.LimitReader(resp.Body, maxResposta)); err == nil {
@@ -162,16 +182,27 @@ func (s *Servidor) comCache(w http.ResponseWriter, r *http.Request, p *pedido) {
 	v, err, _ := s.sf.Do(chave, func() (any, error) {
 		lider = true
 		// O líder não pode cancelar a chamada de todos se desconectar.
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), s.total)
-		defer cancel()
+		base, fim := context.WithTimeout(context.WithoutCancel(r.Context()), s.total)
+		defer fim()
+		ctx, cancel := context.WithCancelCause(base)
+		defer cancel(nil)
+		var v *vigia
+		if p.stream {
+			v = s.novaVigia(cancel) // o mesmo watchdog do caminho direto
+			defer v.parar()
+		}
 		resp, dest, err := s.d.Roteador.Chamar(ctx, p.alias, p.corpo)
 		if err != nil {
-			return nil, err
+			return nil, causa(ctx, err)
 		}
 		defer resp.Body.Close()
-		corpo, err := io.ReadAll(io.LimitReader(resp.Body, maxResposta))
+		var leitor io.Reader = resp.Body
+		if v != nil {
+			v.r, leitor = resp.Body, v
+		}
+		corpo, err := io.ReadAll(io.LimitReader(leitor, maxResposta))
 		if err != nil {
-			return nil, err
+			return nil, causa(ctx, err)
 		}
 		uso := usoDe(corpo, p.stream)
 		e := cache.Entrada{Corpo: corpo, Stream: p.stream, Custo: s.d.Config.Custo(dest.Modelo, uso, time.Now())}
@@ -197,7 +228,7 @@ func (s *Servidor) entregar(w http.ResponseWriter, r *http.Request, p *pedido, e
 		s.responderCorpo(w, p, e.Corpo)
 		return
 	}
-	if _, err := s.relaySSE(r.Context(), w, bytes.NewReader(e.Corpo), p, false); err != nil {
+	if _, err := s.relaySSE(r.Context(), w, bytes.NewReader(e.Corpo), p); err != nil {
 		s.erroRelay(w, p, err)
 	}
 }
@@ -230,7 +261,14 @@ func (s *Servidor) sombra(ctx context.Context, p *pedido, d gateway.Destino) {
 	delete(corpo, "stream_options")
 	ev := armazenamento.Evento{TS: time.Now(), ClienteID: p.cli.ID, RequestID: p.ev.RequestID,
 		Modelo: p.alias, Destino: d.String(), Shadow: true, PII: p.ev.PII}
+	select {
+	case s.sombras <- struct{}{}:
+	default:
+		s.met.sombrasDescartadas.Add(1)
+		return
+	}
 	s.bg.Go(func() {
+		defer func() { <-s.sombras }()
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.total)
 		defer cancel()
 		resp, err := s.d.Roteador.ChamarDestino(ctx, d, corpo)

@@ -68,10 +68,9 @@ func novoBreaker(nome string) *gobreaker.CircuitBreaker[*http.Response] {
 		},
 		// Erro do cliente (400, 422...) não indica provedor doente.
 		IsSuccessful: func(err error) bool { return err == nil || erroDoCliente(err) },
-		// Cliente que desistiu não diz nada sobre a saúde do provedor.
-		IsExcluded: func(err error) bool {
-			return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-		},
+		// Cliente que desistiu não diz nada sobre a saúde do provedor. Já um prazo estourado
+		// (do gateway) conta como falha: provedor travado é o caso clássico do breaker.
+		IsExcluded: func(err error) bool { return errors.Is(err, context.Canceled) },
 	})
 }
 

@@ -41,10 +41,23 @@ func (m *Mapa) Len() int { return len(m.valores) }
 
 // Mascarar é determinístico: o mesmo texto gera sempre o mesmo resultado, o que preserva o
 // cache do gateway e o cache de prefixo da DeepSeek.
-func (m *Mapa) Mascarar(s string) string {
+func (m *Mapa) Mascarar(s string) string { return m.mascarar(s, s) }
+
+// MascararVarios mascara as mensagens de uma requisição. Os marcadores evitam o texto de
+// todas elas: um "[CPF_1]" literal numa mensagem não pode virar o marcador do CPF de outra.
+func (m *Mapa) MascararVarios(textos []string) []string {
+	todos := strings.Join(textos, "\x00")
+	out := make([]string, len(textos))
+	for i, t := range textos {
+		out[i] = m.mascarar(t, todos)
+	}
+	return out
+}
+
+func (m *Mapa) mascarar(s, reservado string) string {
 	out := s
 	for _, t := range tipos {
-		out = m.substituir(out, s, t)
+		out = m.substituir(out, reservado, t)
 	}
 	return out
 }

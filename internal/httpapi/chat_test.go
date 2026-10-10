@@ -76,7 +76,13 @@ func novoCenario(t testing.TB) *cenario {
 			}
 		}
 	})
-	servidores := map[string]http.Handler{"falso": c.espiao, "ruim": &provedor.Falso{TaxaErro: 1}, "lento": lento}
+	// mudo aceita a conexão e nunca manda cabeçalho.
+	// Lê o corpo antes de esperar: só assim o servidor HTTP/1.1 percebe a desconexão do cliente.
+	mudo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		<-r.Context().Done()
+	})
+	servidores := map[string]http.Handler{"falso": c.espiao, "ruim": &provedor.Falso{TaxaErro: 1}, "lento": lento, "mudo": mudo}
 	clientes := map[string]*provedor.Cliente{}
 	provs := map[string]gateway.ProvedorCfg{}
 	for nome, h := range servidores {
@@ -92,6 +98,7 @@ func novoCenario(t testing.TB) *cenario {
 			"fallback": {Destinos: []gateway.Destino{{Provedor: "ruim", Modelo: "m1"}, {Provedor: "falso", Modelo: "m2"}}, Concorrencia: 100},
 			"migracao": {Destinos: []gateway.Destino{{Provedor: "falso", Modelo: "m1"}}, Shadow: &gateway.Destino{Provedor: "falso", Modelo: "m2"}, Concorrencia: 100},
 			"travado":  {Destinos: []gateway.Destino{{Provedor: "lento", Modelo: "m1"}}, Concorrencia: 100},
+			"calado":   {Destinos: []gateway.Destino{{Provedor: "mudo", Modelo: "m1"}}, Concorrencia: 100},
 		},
 		Precos: map[string]gateway.PrecoCfg{"m1": {EntradaCacheMiss: 100, Saida: 1000}, "m2": {EntradaCacheMiss: 200, Saida: 2000}},
 	}
@@ -480,5 +487,77 @@ func TestModelosEMetricas(t *testing.T) {
 	}
 	if resp, _ := http.Get(c.url + "/admin/clientes"); resp.StatusCode != 401 {
 		t.Fatalf("admin sem token: %d", resp.StatusCode)
+	}
+}
+
+func TestWatchdogAntesDosCabecalhos(t *testing.T) {
+	c := novoCenario(t)
+	c.s.primeiroToken = 100 * time.Millisecond
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+	inicio := time.Now()
+	resp := c.chat(chave, msg("calado", "oi", true))
+	if resp.StatusCode != 504 || erroCodigo(t, resp) != "timeout" || time.Since(inicio) > 2*time.Second {
+		t.Fatalf("provedor que nunca manda cabeçalho: status %d em %v", resp.StatusCode, time.Since(inicio))
+	}
+}
+
+func TestWatchdogNoCaminhoDoCache(t *testing.T) {
+	c := novoCenario(t)
+	c.s.primeiroToken = 100 * time.Millisecond
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja", Cache: true})
+	inicio := time.Now()
+	resp := c.chat(chave, msg("travado", "oi", true))
+	if resp.StatusCode != 504 || time.Since(inicio) > 2*time.Second {
+		t.Fatalf("cache + só keep-alive: status %d em %v", resp.StatusCode, time.Since(inicio))
+	}
+}
+
+// Sem stream_options pedido pelo cliente, o chunk de usage com choices vazio não pode chegar
+// a ele: o laço clássico chunk.choices[0] dos SDKs quebraria.
+func TestUsageSoQuandoOClientePede(t *testing.T) {
+	c := novoCenario(t)
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+	ler := func(corpo string) string {
+		resp := c.chat(chave, corpo)
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+	if b := ler(msg("rapido", "oi", true)); strings.Contains(b, `"choices":[]`) {
+		t.Fatalf("cliente não pediu usage e recebeu chunk sem choices:\n%s", b)
+	}
+	pediu := `{"model":"rapido","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"user","content":"oi"}]}`
+	if b := ler(pediu); !strings.Contains(b, `"usage"`) {
+		t.Fatalf("cliente pediu usage e não recebeu:\n%s", b)
+	}
+}
+
+func TestStreamCortadoAindaCobra(t *testing.T) {
+	c := novoCenario(t)
+	c.falso.PorToken = 50 * time.Millisecond
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+	ctx, cancel := context.WithCancel(context.Background())
+	resp := c.chatCtx(ctx, chave, msg("rapido", strings.Repeat("palavra ", 50), true))
+	br := bufio.NewReader(resp.Body)
+	for range 6 {
+		_, _ = br.ReadString('\n')
+	}
+	cancel()
+	resp.Body.Close()
+	if r := c.relatorio(); r.Total.CustoMicro == 0 {
+		t.Fatalf("stream cortado foi registrado sem custo: %+v", r.Total)
+	}
+}
+
+func TestShadowLimitado(t *testing.T) {
+	c := novoCenario(t)
+	c.s.sombras = make(chan struct{}) // sem vaga nenhuma
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+	conteudo(t, c.chat(chave, msg("migracao", "oi", false)))
+	if n := c.falso.Chamadas.Load(); n != 1 {
+		t.Fatalf("shadow sem vaga devia ser descartado: provedor chamado %d vezes", n)
+	}
+	if c.s.met.sombrasDescartadas.Load() != 1 {
+		t.Fatal("descarte de shadow não foi contado")
 	}
 }

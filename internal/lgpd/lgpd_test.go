@@ -109,3 +109,32 @@ func FuzzStream(f *testing.F) {
 		}
 	})
 }
+
+// O marcador literal numa mensagem não pode ser reaproveitado para o dado real de outra.
+func TestMascararVariosNaoColideEntreMensagens(t *testing.T) {
+	m := NovoMapa()
+	in := []string{"use o rótulo [CPF_1] no formulário", "meu CPF é 529.982.247-25"}
+	out := m.MascararVarios(in)
+	if out[1] != "meu CPF é [CPF_2]" {
+		t.Fatalf("segunda mensagem = %q, queria [CPF_2]", out[1])
+	}
+	if got := m.Restaurar("O campo [CPF_1] foi preenchido"); got != "O campo [CPF_1] foi preenchido" {
+		t.Fatalf("restaurar trocou o literal do usuário: %q", got)
+	}
+	for i := range in {
+		if m.Restaurar(out[i]) != in[i] {
+			t.Fatalf("ida e volta da mensagem %d: %q", i, m.Restaurar(out[i]))
+		}
+	}
+}
+
+func FuzzMascararVarios(f *testing.F) {
+	f.Add("[CPF_1]", "529.982.247-25")
+	f.Fuzz(func(t *testing.T, a, b string) {
+		m := NovoMapa()
+		out := m.MascararVarios([]string{a, b})
+		if m.Restaurar(out[0]) != a || m.Restaurar(out[1]) != b {
+			t.Fatalf("ida e volta falhou: %q %q", a, b)
+		}
+	})
+}

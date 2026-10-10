@@ -105,11 +105,11 @@ func (f *Falso) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		evento(chunk(map[string]string{"content": p}, nil))
 	}
-	fim := chunk(map[string]string{}, "stop")
+	evento(chunk(map[string]string{}, "stop"))
+	// Como a DeepSeek e a OpenAI: o usage vem num chunk próprio, com choices vazio.
 	if req.StreamOptions.IncludeUsage {
-		fim["usage"] = uso
+		evento(map[string]any{"id": id, "object": "chat.completion.chunk", "model": req.Model, "choices": []any{}, "usage": uso})
 	}
-	evento(fim)
 	fmt.Fprint(w, "data: [DONE]\n\n")
 }
 

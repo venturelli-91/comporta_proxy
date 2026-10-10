@@ -47,6 +47,9 @@ type Servidor struct {
 	sf   singleflight.Group
 	met  contadores
 	bg   sync.WaitGroup // shadows em andamento
+	// sombras limita os shadows simultâneos: tráfego de comparação não pode disputar o limite
+	// de concorrência da conta com o tráfego real. Sem vaga, o shadow é descartado e contado.
+	sombras chan struct{}
 
 	limMu   sync.Mutex
 	limites map[int64]limitador
@@ -69,7 +72,7 @@ func Novo(d Deps) (*Servidor, error) {
 	}
 	t := d.Config.Timeouts
 	s := &Servidor{
-		d: d, limites: map[int64]limitador{},
+		d: d, limites: map[int64]limitador{}, sombras: make(chan struct{}, 16),
 		primeiroToken: padrao(t.PrimeiroToken(), 30*time.Second),
 		entreChunks:   padrao(t.EntreChunks(), 60*time.Second),
 		total:         padrao(t.Total(), 10*time.Minute),

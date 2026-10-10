@@ -160,3 +160,21 @@ func TestSemaforoCheioDevolveOcupado(t *testing.T) {
 		t.Fatalf("erro = %v, queria ErrOcupado", err)
 	}
 }
+
+// Um provedor que trava em toda chamada é o caso clássico do breaker: o prazo estourado
+// pelo próprio gateway tem que contar como falha (só o cancelamento do cliente é excluído).
+func TestBreakerContaTimeout(t *testing.T) {
+	trava := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body) // sem ler o corpo o servidor não percebe a desconexão
+		<-r.Context().Done()
+	})
+	r := novoCenario(t, trava, &provedor.Falso{}, 10)
+	for range 5 {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		_, _, _ = r.Chamar(ctx, "rapido", corpoChat())
+		cancel()
+	}
+	if e := r.Estado(); e[0].Breaker != "open" {
+		t.Fatalf("breaker = %+v, queria aberto depois de 5 timeouts", e)
+	}
+}

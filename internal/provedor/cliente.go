@@ -70,7 +70,8 @@ func (c *Cliente) Enviar(ctx context.Context, corpo []byte) (*http.Response, err
 	resp, err := c.http.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			// A causa diz quem cortou: o cliente (Canceled) ou um prazo do gateway.
+			return nil, context.Cause(ctx)
 		}
 		return nil, &ErroHTTP{Mensagem: err.Error(), causa: err}
 	}

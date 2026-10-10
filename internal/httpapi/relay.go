@@ -17,38 +17,43 @@ import (
 
 var errTimeout = errors.New("provedor sem progresso")
 
-// relaySSE lê o stream do provedor linha a linha e repassa cada evento com flush, para o
-// primeiro token chegar ao cliente sem atraso. No caminho: ignora `: keep-alive`, restaura
-// dados pessoais (com buffer para marcador partido), captura o `usage` do último chunk e
-// aplica o watchdog (prazo até o primeiro dado e entre dados; keep-alive não conta).
-// Os cabeçalhos só são enviados no primeiro dado útil: até lá ainda dá para responder um
-// erro de verdade (504) em vez de um stream vazio.
-func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io.Reader, p *pedido, aoVivo bool) (gateway.Uso, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	linhas := make(chan []byte)
-	falha := make(chan error, 1)
-	go func() {
-		defer close(linhas)
-		sc := bufio.NewScanner(corpo)
-		sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
-		for sc.Scan() {
-			select {
-			case linhas <- bytes.Clone(sc.Bytes()):
-			case <-ctx.Done():
-				return
-			}
-		}
-		falha <- sc.Err()
-	}()
+// vigia é o watchdog do stream: se passar o prazo sem um "data:" chegar, cancela o contexto
+// da chamada com errTimeout. Começa a contar antes do provedor mandar os cabeçalhos, então
+// cobre também o provedor que aceita a conexão e trava. Keep-alive (": ...") não conta.
+type vigia struct {
+	r     io.Reader
+	t     *time.Timer
+	entre time.Duration
+}
 
-	limite := s.primeiroToken
-	if !aoVivo {
-		limite = s.total // replay do cache: os bytes já estão em memória
+func (s *Servidor) novaVigia(cancel context.CancelCauseFunc) *vigia {
+	return &vigia{t: time.AfterFunc(s.primeiroToken, func() { cancel(errTimeout) }), entre: s.entreChunks}
+}
+
+func (v *vigia) Read(p []byte) (int, error) {
+	n, err := v.r.Read(p)
+	if bytes.Contains(p[:n], []byte("data:")) {
+		v.t.Reset(v.entre)
 	}
-	timer := time.NewTimer(limite)
-	defer timer.Stop()
+	return n, err
+}
 
+func (v *vigia) parar() { v.t.Stop() }
+
+// causa traduz o erro de leitura no motivo real: prazo do vigia, cliente que saiu ou falha.
+func causa(ctx context.Context, err error) error {
+	if c := context.Cause(ctx); c != nil {
+		return c
+	}
+	return err
+}
+
+// relaySSE lê o stream (ao vivo ou do cache) linha a linha e repassa cada evento com flush,
+// para o primeiro token chegar ao cliente sem atraso. No caminho: ignora keep-alive, restaura
+// dados pessoais (com buffer para marcador partido), captura o usage e só repassa o chunk de
+// usage se o cliente pediu. Os cabeçalhos só saem no primeiro dado útil: até lá ainda dá
+// para responder um erro de verdade (504) em vez de um stream vazio.
+func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io.Reader, p *pedido) (gateway.Uso, error) {
 	var st *lgpd.Stream
 	if p.mapa.Len() > 0 {
 		st = p.mapa.NovoStream()
@@ -87,52 +92,53 @@ func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io
 		return escrever(b)
 	}
 
-	for {
-		select {
-		case l, ok := <-linhas:
-			if !ok {
-				if ctx.Err() != nil {
-					return uso, ctx.Err()
-				}
-				if err := <-falha; err != nil {
-					return uso, err
-				}
-				return uso, soltarResto()
-			}
-			dado, eh := bytes.CutPrefix(l, []byte("data:"))
-			if !eh {
-				continue // keep-alive, comentário ou separador
-			}
-			dado = bytes.TrimSpace(dado)
-			if bytes.Equal(dado, []byte("[DONE]")) {
-				if err := soltarResto(); err != nil {
-					return uso, err
-				}
-				if err := escrever(dado); err != nil {
-					return uso, err
-				}
-				continue
-			}
-			// Só o chunk com usage é decodificado só para isso; os demais seguem como bytes.
-			if bytes.Contains(dado, []byte(`"usage"`)) {
-				var v struct{ Usage *gateway.Uso }
-				if json.Unmarshal(dado, &v) == nil && v.Usage != nil {
-					uso = *v.Usage
-				}
-			}
-			if st != nil {
-				dado = restaurarChunk(dado, st)
+	sc := bufio.NewScanner(corpo)
+	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	for sc.Scan() {
+		dado, eh := bytes.CutPrefix(sc.Bytes(), []byte("data:"))
+		if !eh {
+			continue // keep-alive, comentário ou separador
+		}
+		dado = bytes.TrimSpace(dado)
+		if bytes.Equal(dado, []byte("[DONE]")) {
+			if err := soltarResto(); err != nil {
+				return uso, err
 			}
 			if err := escrever(dado); err != nil {
 				return uso, err
 			}
-			timer.Reset(s.entreChunks)
-		case <-timer.C:
-			return uso, errTimeout
-		case <-ctx.Done():
-			return uso, ctx.Err()
+			continue
+		}
+		p.chunks++
+		// Só o chunk com usage é decodificado para isso; os demais seguem como bytes.
+		if bytes.Contains(dado, []byte(`"usage"`)) {
+			var v struct {
+				Usage   *gateway.Uso
+				Choices []json.RawMessage
+			}
+			if json.Unmarshal(dado, &v) == nil && v.Usage != nil {
+				uso = *v.Usage
+				// O gateway pede include_usage para medir custo; o cliente que não pediu não
+				// recebe o chunk sem choices (o laço chunk.choices[0] dos SDKs quebraria).
+				if len(v.Choices) == 0 && !p.pediuUso {
+					continue
+				}
+			}
+		}
+		if st != nil {
+			dado = restaurarChunk(dado, st)
+		}
+		if err := escrever(dado); err != nil {
+			return uso, err
 		}
 	}
+	if err := sc.Err(); err != nil {
+		return uso, causa(ctx, err)
+	}
+	if ctx.Err() != nil {
+		return uso, causa(ctx, ctx.Err())
+	}
+	return uso, soltarResto()
 }
 
 // restaurarChunk troca os marcadores no delta.content de um chunk.
@@ -180,17 +186,24 @@ func usoDe(b []byte, stream bool) gateway.Uso {
 }
 
 // mascararMensagens troca os dados pessoais de messages[].content (texto) por marcadores.
+// Todas as mensagens são mascaradas juntas para um marcador literal de uma não colidir com
+// o dado real de outra.
 // ponytail: content em partes (multimodal) passa sem máscara; tratar quando houver cliente usando.
 func mascararMensagens(corpo map[string]json.RawMessage, mapa *lgpd.Mapa) error {
 	var msgs []map[string]json.RawMessage
 	if err := json.Unmarshal(corpo["messages"], &msgs); err != nil {
 		return err
 	}
+	var textos []string
+	var alvos []map[string]json.RawMessage
 	for _, m := range msgs {
 		var t string
 		if json.Unmarshal(m["content"], &t) == nil {
-			m["content"], _ = json.Marshal(mapa.Mascarar(t))
+			textos, alvos = append(textos, t), append(alvos, m)
 		}
+	}
+	for i, t := range mapa.MascararVarios(textos) {
+		alvos[i]["content"], _ = json.Marshal(t)
 	}
 	b, err := json.Marshal(msgs)
 	corpo["messages"] = b

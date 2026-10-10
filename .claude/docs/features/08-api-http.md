@@ -53,3 +53,17 @@ Escreva o teste de que um cliente com orçamento estourado **não** consegue pas
 
 ## Pergunta de entrevista
 "Dez requisições iguais chegam ao mesmo tempo e o cliente da primeira desconecta. O que acontece com as outras nove?"
+
+## Correções da revisão final (09/10)
+O review independente do branch achou 7 pontos importantes. Todos foram corrigidos com um teste que falhou antes:
+| Achado | Correção | Teste |
+|---|---|---|
+| Stream travava sem prazo até o provedor mandar cabeçalhos | `vigia`: o watchdog começa antes do `Chamar` e cancela com `errTimeout` | `TestWatchdogAntesDosCabecalhos` |
+| Caminho de cache/singleflight sem watchdog | o líder lê através da mesma `vigia` | `TestWatchdogNoCaminhoDoCache` |
+| Breaker ignorava timeouts | só `context.Canceled` (cliente) é excluído; `Enviar` devolve `context.Cause` | `TestBreakerContaTimeout` |
+| Marcador literal numa mensagem colidia com o dado real de outra | `lgpd.MascararVarios` reserva o texto de todas as mensagens | `TestMascararVariosNaoColideEntreMensagens` + `FuzzMascararVarios` |
+| Chunk de usage com `choices: []` quebrava `chunk.choices[0]` dos SDKs | só repassa se o cliente pediu `include_usage`; o falso agora imita a DeepSeek | `TestUsageSoQuandoOClientePede` |
+| Stream cortado registrava custo 0 (furava o orçamento) | estimativa: bytes das mensagens / 4 + 1 token por chunk | `TestStreamCortadoAindaCobra` |
+| Shadow sem limite disputava a concorrência da conta | semáforo de 16 shadows; sem vaga, descarta e conta (`comporta_shadow_descartados_total`) | `TestShadowLimitado` |
+
+Bônus da correção: o relay ficou mais simples. O `vigia` cancela o contexto e a leitura passou a ser síncrona, sem a goroutine leitora.

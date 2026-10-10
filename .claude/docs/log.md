@@ -20,3 +20,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 09/10 | 11 | `test(carga)` | 991 req/s p95 61,7 ms (falso 60 ms) → overhead ~1,7 ms; cache evita 99,9%; caos 50% → 98,4% sucesso |
 | 09/10 | Auditoria ponytail (repo inteiro) | `refactor` | 1 corte: campo/parâmetro `nome` morto em `provedor.Novo`; resto enxuto, dívida já marcada com `ponytail:` |
 | 09/10 | 12 Docs finais | `docs` | README com números; CLAUDE.md (roadmap, decisões, pitch preenchido); ARQUITETURA.md (estado atual); comunicação atualizada |
+| 09/10 | Correções da revisão final | `fix(httpapi)` | 7 achados importantes corrigidos com teste RED→GREEN; relay sem goroutine (vigia); 104 testes; race 2x ok |
