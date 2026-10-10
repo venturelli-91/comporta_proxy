@@ -11,7 +11,7 @@ Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 - [x] 06 LGPD: mascaramento + restauração (inclusive em stream)
 - [x] 07 Armazenamento: clientes, chaves por hash, uso em lote
 - [x] 08 API HTTP: chat (com e sem stream), auth, rate limit, orçamento, cache + singleflight, shadow, admin, métricas
-- [ ] 09 Binário + Docker + compose
+- [x] 09 Binário + Docker + compose
 - [ ] 10 Painel React
 - [ ] 11 k6 contra o falso, números no README
 - [ ] 12 Auditoria ponytail, README, PR

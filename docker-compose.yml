@@ -1,0 +1,13 @@
+services:
+  comporta:
+    build: .
+    ports: ["8080:8080"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-troque-este-token}
+    volumes:
+      - dados:/dados
+volumes:
+  dados: {}
