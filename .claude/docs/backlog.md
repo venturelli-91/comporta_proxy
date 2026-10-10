@@ -65,3 +65,10 @@ Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pag
 - [x] M-8 (resolvido 09/10: sessão aleatória revogável, limite de login, Secure atrás de proxy, compose sem token padrão) Cookie admin não revogável no servidor, `Secure` atrás do TLS do Cloud Run, sem limite de tentativas, token padrão no compose
 - [ ] M-9 Teste de desconexão não confere o status 499 explicitamente
 - [ ] M-10 Sessão expirada não volta para o login no painel (invalidar `sessao` num 401)
+
+## Achados menores da revisão de 10/10 — adiados
+- [ ] Resposta acima de 16 MiB vira 502 com custo 0, mas o provedor cobrou: estimar como no stream cortado
+- [ ] reasoning_content retido no restaurador (termina em `[`) sai depois do content: finalizar o raciocínio no primeiro chunk de content
+- [ ] Teste do limite de login paralelo deveria exigir exatamente 5, não só no máximo 5
+- [ ] `ipDe` assume Cloud Run sem HTTPS Load Balancer na frente (com LB, a última entrada do XFF é o LB)
+- [ ] recarregar_test ignora erros de CriarCliente/CriarChave; falso negativo sem o mutex depende de 200 ms
