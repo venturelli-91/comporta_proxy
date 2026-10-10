@@ -59,8 +59,8 @@ type Servidor struct {
 	porCliente int
 
 	sessMu     sync.Mutex
-	sessoes    map[string]time.Time // hash do cookie → validade
-	tentativas *rate.Limiter        // logins por minuto (global)
+	sessoes    map[string]time.Time     // hash do cookie → validade
+	tentativas map[string]*rate.Limiter // logins errados por IP
 
 	gastoMu  sync.Mutex
 	gastoMes string
@@ -82,7 +82,7 @@ func Novo(d Deps) (*Servidor, error) {
 	s := &Servidor{
 		d: d, limites: map[int64]limitador{}, sombras: make(chan struct{}, 16),
 		emCurso: map[int64]int{}, porCliente: 32,
-		sessoes: map[string]time.Time{}, tentativas: rate.NewLimiter(rate.Every(12*time.Second), 5),
+		sessoes: map[string]time.Time{}, tentativas: map[string]*rate.Limiter{},
 		primeiroToken: padrao(t.PrimeiroToken(), 30*time.Second),
 		entreChunks:   padrao(t.EntreChunks(), 60*time.Second),
 		total:         padrao(t.Total(), 10*time.Minute),

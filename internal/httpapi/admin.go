@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"net"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/venturelli-91/comporta_proxy/internal/armazenamento"
 )
@@ -29,8 +33,8 @@ func (s *Servidor) rotasAdmin(mux *http.ServeMux) {
 }
 
 func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
-	// Limite global de tentativas: o token do admin é a chave de tudo, não pode ser chutado.
-	if !s.tentativas.Allow() {
+	lim := s.limiteLogin(ipDe(r))
+	if lim.Tokens() < 1 {
 		retryAfter(w, time.Minute)
 		erro(w, http.StatusTooManyRequests, "muitas_tentativas", "muitas tentativas de login, aguarde um minuto")
 		return
@@ -38,6 +42,7 @@ func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	var v struct{ Token string }
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&v)
 	if s.d.AdminToken == "" || !iguais(v.Token, s.d.AdminToken) {
+		lim.Allow() // só tentativa errada consome
 		erro(w, http.StatusUnauthorized, "nao_autorizado", "token de admin inválido")
 		return
 	}
@@ -46,6 +51,39 @@ func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: cookieAdmin, Value: s.novaSessao(), Path: "/", MaxAge: int(duracaoSessao.Seconds()),
 		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: seguro})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// limiteLogin: 5 tentativas erradas por IP, uma nova a cada 12 s. Por IP para que um
+// atacante não tranque o admin de verdade do lado de fora.
+// ponytail: mapa zerado ao passar de 10 mil IPs; LRU se isso virar alvo.
+func (s *Servidor) limiteLogin(ip string) *rate.Limiter {
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	if len(s.tentativas) > 10_000 {
+		s.tentativas = map[string]*rate.Limiter{}
+	}
+	l, ok := s.tentativas[ip]
+	if !ok {
+		l = rate.NewLimiter(rate.Every(12*time.Second), 5)
+		s.tentativas[ip] = l
+	}
+	return l
+}
+
+// ipDe usa a última entrada do X-Forwarded-For, que é a que o proxy confiável (o front-end do
+// Cloud Run) acrescenta; o cliente só consegue forjar as anteriores. Sem proxy na frente, o
+// cabeçalho inteiro é forjável e o limite vira só um obstáculo: a proteção real é o token
+// ter entropia alta (o gerado pelo binário tem 128 bits).
+func ipDe(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		partes := strings.Split(xff, ",")
+		return strings.TrimSpace(partes[len(partes)-1])
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 func (s *Servidor) logout(w http.ResponseWriter, r *http.Request) {

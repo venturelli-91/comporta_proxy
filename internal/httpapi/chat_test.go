@@ -622,14 +622,24 @@ func TestLogoutRevogaSessao(t *testing.T) {
 	}
 }
 
-func TestLoginLimitaTentativas(t *testing.T) {
+// O limite de login é por IP e só conta tentativa errada: um atacante esgota o próprio
+// limite, mas não tranca o admin de verdade do lado de fora.
+func TestLoginLimitaTentativasSemTrancarOAdmin(t *testing.T) {
 	c := novoCenario(t)
 	var ultimo int
 	for range 6 {
-		ultimo = c.login("chute").StatusCode
+		ultimo = c.login("chute", "X-Forwarded-For", "203.0.113.9").StatusCode
 	}
 	if ultimo != 429 {
-		t.Fatalf("6ª tentativa errada seguida: status %d, queria 429", ultimo)
+		t.Fatalf("6ª tentativa errada do mesmo IP: status %d, queria 429", ultimo)
+	}
+	if st := c.login(tokenAdmin, "X-Forwarded-For", "198.51.100.7").StatusCode; st != 204 {
+		t.Fatalf("admin em outro IP foi trancado pelo atacante: %d", st)
+	}
+	for range 6 {
+		if st := c.login(tokenAdmin, "X-Forwarded-For", "198.51.100.7").StatusCode; st != 204 {
+			t.Fatalf("login certo não pode consumir o limite: %d", st)
+		}
 	}
 }
 
