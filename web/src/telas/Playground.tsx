@@ -1,8 +1,33 @@
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, type Modelo } from "../api";
+import { botao, botaoSecundario, campo, cartao, Selo } from "../ui";
 
-const campo = "mt-1 block w-full rounded-md border border-borda bg-superficie px-3 py-2";
+// O gateway devolve em X-Comporta-Enviado (base64, UTF-8) a última mensagem como saiu para o
+// provedor, já mascarada. atob dá bytes "latin1"; TextDecoder remonta os acentos.
+function decodificar(b64: string | null): string | null {
+  if (!b64) return null;
+  try {
+    return new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+  } catch {
+    return null;
+  }
+}
+
+// Realça os marcadores ([CPF_1], [EMAIL_2]...) que tomaram o lugar dos dados pessoais.
+function comMarcadores(texto: string): ReactNode[] {
+  return texto.split(/(\[(?:CPF|CNPJ|CARTAO|EMAIL|TELEFONE)_\d+\])/).map((parte, i) =>
+    i % 2 ? (
+      <mark key={i} className="rounded bg-acento/15 px-1 font-mono text-[0.92em] font-medium text-acento">
+        {parte}
+      </mark>
+    ) : (
+      parte
+    ),
+  );
+}
+
+type Info = { status?: string; ttft?: number; total?: number; entrada?: number; saida?: number; requestId?: string };
 
 // Playground chama a API pública como um cliente faria: com a chave ck_ colada aqui (que fica
 // só na memória do componente). fetch + ReadableStream porque EventSource não faz POST nem
@@ -11,11 +36,13 @@ export default function Playground() {
   const modelos = useQuery({ queryKey: ["modelos"], queryFn: () => api<Modelo[]>("/admin/modelos") });
   const [chave, setChave] = useState("");
   const [modelo, setModelo] = useState("rapido");
-  const [texto, setTexto] = useState("Meu CPF é 529.982.247-25. Pode confirmar o cadastro?");
+  const [texto, setTexto] = useState("Meu CPF é 529.982.247-25 e o e-mail ana@exemplo.com. Pode confirmar o cadastro?");
   const [stream, setStream] = useState(true);
   const [cache, setCache] = useState(false);
   const [saida, setSaida] = useState("");
-  const [info, setInfo] = useState("");
+  const [enviado, setEnviado] = useState<string | null>(null);
+  const [respondeu, setRespondeu] = useState(false);
+  const [info, setInfo] = useState<Info>({});
   const [rodando, setRodando] = useState(false);
   const abortar = useRef<AbortController | null>(null);
 
@@ -24,7 +51,9 @@ export default function Playground() {
     abortar.current = new AbortController();
     setRodando(true);
     setSaida("");
-    setInfo("");
+    setEnviado(null);
+    setRespondeu(false);
+    setInfo({});
     const inicio = performance.now();
     let ttft = 0;
     try {
@@ -38,9 +67,11 @@ export default function Playground() {
         },
         body: JSON.stringify({ model: modelo, stream, messages: [{ role: "user", content: texto }] }),
       });
+      setRespondeu(r.ok); // erro (chave inválida, limite) não diz nada sobre o LGPD da chave
+      setEnviado(decodificar(r.headers.get("X-Comporta-Enviado")));
       if (!r.ok) {
         const corpo = await r.json().catch(() => null);
-        setInfo(`${r.status}: ${corpo?.erro?.mensagem ?? r.statusText}`);
+        setInfo({ status: `${r.status}: ${corpo?.erro?.mensagem ?? r.statusText}` });
         return;
       }
       let uso: { prompt_tokens: number; completion_tokens: number } | undefined;
@@ -68,28 +99,24 @@ export default function Playground() {
           }
         }
       }
-      const total = Math.round(performance.now() - inicio);
-      setInfo(
-        [
-          stream && ttft ? `primeiro token em ${Math.round(ttft)} ms` : "",
-          `total ${total} ms`,
-          uso ? `${uso.prompt_tokens} tokens de entrada, ${uso.completion_tokens} de saída` : "",
-          r.headers.get("X-Request-Id") ? `request ${r.headers.get("X-Request-Id")}` : "",
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      );
+      setInfo({
+        ttft: stream && ttft ? Math.round(ttft) : undefined,
+        total: Math.round(performance.now() - inicio),
+        entrada: uso?.prompt_tokens,
+        saida: uso?.completion_tokens,
+        requestId: r.headers.get("X-Request-Id") ?? undefined,
+      });
     } catch (err) {
-      if ((err as Error).name !== "AbortError") setInfo(String(err));
+      if ((err as Error).name !== "AbortError") setInfo({ status: String(err) });
     } finally {
       setRodando(false);
     }
   };
 
   return (
-    <div className="grid gap-8 lg:grid-cols-2">
-      <form onSubmit={enviar} className="space-y-3 text-sm">
-        <label className="block">
+    <div className="grid items-start gap-8 xl:grid-cols-[22rem_1fr]">
+      <form onSubmit={enviar} className={`${cartao} space-y-4 p-5 text-sm`}>
+        <label className="block font-medium">
           Chave do cliente
           <input
             required
@@ -98,12 +125,12 @@ export default function Playground() {
             autoComplete="off"
             value={chave}
             onChange={(e) => setChave(e.target.value)}
-            className={campo}
+            className={`${campo} font-mono font-normal`}
           />
         </label>
-        <label className="block">
+        <label className="block font-medium">
           Modelo
-          <select value={modelo} onChange={(e) => setModelo(e.target.value)} className={campo}>
+          <select value={modelo} onChange={(e) => setModelo(e.target.value)} className={`${campo} font-normal`}>
             {modelos.data?.map((m) => (
               <option key={m.alias} value={m.alias}>
                 {m.alias} ({m.destinos[0]}){m.shadow ? " com shadow" : ""}
@@ -111,9 +138,9 @@ export default function Playground() {
             ))}
           </select>
         </label>
-        <label className="block">
+        <label className="block font-medium">
           Mensagem
-          <textarea rows={5} value={texto} onChange={(e) => setTexto(e.target.value)} className={campo} />
+          <textarea rows={5} value={texto} onChange={(e) => setTexto(e.target.value)} className={`${campo} font-normal`} />
         </label>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           <label className="flex items-center gap-2">
@@ -124,23 +151,79 @@ export default function Playground() {
           </label>
         </div>
         <div className="flex gap-3">
-          <button disabled={rodando} className="rounded-md bg-acento px-3 py-2 font-medium text-sobre-acento disabled:opacity-60 ">
-            Enviar
+          <button disabled={rodando} className={`${botao} flex-1`}>
+            {rodando ? "Enviando…" : "Enviar"}
           </button>
           {rodando && (
-            <button type="button" className="rounded-md border border-borda px-3 py-2" onClick={() => abortar.current?.abort()}>
+            <button type="button" className={botaoSecundario} onClick={() => abortar.current?.abort()}>
               Cancelar
             </button>
           )}
         </div>
       </form>
-      <section aria-live="polite" aria-labelledby="resp">
-        <h2 id="resp" className="mb-2 font-medium">Resposta</h2>
-        <div className="min-h-40 whitespace-pre-wrap rounded-lg border border-borda bg-superficie p-4">
-          {saida || <span className="text-suave">A resposta aparece aqui, token a token quando o stream estiver ligado.</span>}
+
+      <div className="space-y-4" aria-live="polite">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Painel
+            titulo="O que o provedor recebeu"
+            selo={enviado !== null ? <Selo tom="ok">dados mascarados</Selo> : respondeu ? <Selo tom="alerta">LGPD desligado nesta chave</Selo> : null}
+          >
+            {enviado !== null ? (
+              comMarcadores(enviado)
+            ) : (
+              <span className="text-suave">
+                {respondeu
+                  ? "Este cliente não mascara dados: a mensagem saiu como foi escrita. Ligue o LGPD em Clientes e chaves."
+                  : "Aqui aparece a mensagem como saiu para a IA, com CPF, e-mail e telefone trocados por marcadores."}
+              </span>
+            )}
+          </Painel>
+          <Painel titulo="O que voltou para você" selo={enviado !== null && saida ? <Selo tom="ok">dados restaurados</Selo> : null}>
+            {saida || (
+              <span className="text-suave">{rodando ? "Aguardando o primeiro token…" : "A resposta aparece aqui, token a token com o stream ligado."}</span>
+            )}
+          </Painel>
         </div>
-        {info && <p className="mt-2 text-sm text-suave">{info}</p>}
-      </section>
+        <Metricas info={info} />
+      </div>
     </div>
+  );
+}
+
+function Painel({ titulo, selo, children }: { titulo: string; selo: ReactNode; children: ReactNode }) {
+  return (
+    <section className={`${cartao} flex flex-col`}>
+      <header className="flex min-h-12 items-center justify-between gap-2 border-b border-borda px-4 py-2.5">
+        <h2 className="text-sm font-medium">{titulo}</h2>
+        {selo}
+      </header>
+      <div className="min-h-36 flex-1 whitespace-pre-wrap px-4 py-3 leading-relaxed">{children}</div>
+    </section>
+  );
+}
+
+function Metricas({ info }: { info: Info }) {
+  if (info.status)
+    return (
+      <p role="alert" className="rounded-md border border-erro/30 bg-erro/8 px-3 py-2 text-sm text-erro">
+        {info.status}
+      </p>
+    );
+  const itens = [
+    info.ttft !== undefined && ["Primeiro token", `${info.ttft} ms`],
+    info.total !== undefined && ["Total", `${info.total} ms`],
+    info.entrada !== undefined && ["Tokens", `${info.entrada} entrada · ${info.saida} saída`],
+    info.requestId && ["Request", info.requestId],
+  ].filter(Boolean) as [string, string][];
+  if (!itens.length) return null;
+  return (
+    <dl className="flex flex-wrap gap-2 text-xs">
+      {itens.map(([rotulo, valor]) => (
+        <div key={rotulo} className="flex gap-1.5 rounded-md border border-borda bg-superficie px-2.5 py-1">
+          <dt className="text-suave">{rotulo}</dt>
+          <dd className="font-medium">{valor}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
