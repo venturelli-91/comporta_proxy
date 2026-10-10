@@ -123,7 +123,7 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	// Shadow só no caminho sem cache: comparar uma resposta reaproveitada não mede nada e paga uma chamada à toa.
 	if m.Shadow != nil {
-		s.sombra(r.Context(), p, *m.Shadow)
+		s.sombra(p, *m.Shadow)
 	}
 	s.direto(w, r, p)
 }
@@ -273,7 +273,7 @@ func (s *Servidor) cobrar(p *pedido, dest gateway.Destino, uso gateway.Uso) {
 
 // sombra manda a mesma requisição (sem stream) ao destino shadow em segundo plano. O cliente
 // nunca espera nem recebe essa resposta; só a comparação fica registrada.
-func (s *Servidor) sombra(ctx context.Context, p *pedido, d gateway.Destino) {
+func (s *Servidor) sombra(p *pedido, d gateway.Destino) {
 	corpo := maps.Clone(p.corpo)
 	corpo["stream"] = json.RawMessage("false")
 	delete(corpo, "stream_options")
@@ -287,7 +287,7 @@ func (s *Servidor) sombra(ctx context.Context, p *pedido, d gateway.Destino) {
 	}
 	s.bg.Go(func() {
 		defer func() { <-s.sombras }()
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.total)
+		ctx, cancel := context.WithTimeout(s.ctxSombras, s.total)
 		defer cancel()
 		resp, err := s.d.Roteador.ChamarDestino(ctx, p.cli.ID, d, corpo)
 		if err != nil {

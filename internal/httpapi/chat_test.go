@@ -117,6 +117,7 @@ func novoCenario(t testing.TB) *cenario {
 			"calado":   {Destinos: []gateway.Destino{{Provedor: "mudo", Modelo: "m1"}}, Concorrencia: 100},
 			"enorme":   {Destinos: []gateway.Destino{{Provedor: "gigante", Modelo: "m1"}}, Concorrencia: 100},
 			"pensa":    {Destinos: []gateway.Destino{{Provedor: "pensador", Modelo: "m1"}}, Concorrencia: 100},
+			"presa":    {Destinos: []gateway.Destino{{Provedor: "falso", Modelo: "m1"}}, Shadow: &gateway.Destino{Provedor: "mudo", Modelo: "m2"}, Concorrencia: 100},
 		},
 		Precos: map[string]gateway.PrecoCfg{"m1": {EntradaCacheMiss: 100, Saida: 1000}, "m2": {EntradaCacheMiss: 200, Saida: 2000}},
 	}
@@ -267,7 +268,7 @@ func erroCodigo(t *testing.T, resp *http.Response) string {
 func (c *cenario) relatorio() armazenamento.Relatorio {
 	c.t.Helper()
 	c.http.Close()
-	c.s.Esperar()
+	c.s.Encerrar(context.Background())
 	c.pararUso()
 	r, err := c.banco.Relatorio(context.Background(), time.Now().Add(-time.Hour), time.Now().Add(time.Hour), 0)
 	if err != nil {
@@ -765,5 +766,26 @@ func TestStreamRestauraRaciocinio(t *testing.T) {
 	}
 	if got := raciocinio.String(); got != "o CPF é 529.982.247-25 mesmo" {
 		t.Fatalf("raciocínio = %q", got)
+	}
+}
+
+// No SIGTERM o Cloud Run espera poucos segundos: um shadow preso num provedor que não
+// responde não pode segurar o desligamento até o prazo total (10 min).
+func TestEncerrarCortaShadowPreso(t *testing.T) {
+	c := novoCenario(t)
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+	conteudo(t, c.chat(chave, msg("presa", "oi", false)))
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	fim := make(chan struct{})
+	inicio := time.Now()
+	go func() { c.s.Encerrar(ctx); close(fim) }()
+	select {
+	case <-fim:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Encerrar não respeitou o prazo: o shadow preso segurou o desligamento")
+	}
+	if d := time.Since(inicio); d > 2*time.Second {
+		t.Fatalf("Encerrar levou %v", d)
 	}
 }

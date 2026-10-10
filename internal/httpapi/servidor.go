@@ -57,6 +57,10 @@ type Servidor struct {
 	// sombras limita os shadows simultâneos: tráfego de comparação não pode disputar o limite
 	// de concorrência da conta com o tráfego real. Sem vaga, o shadow é descartado e contado.
 	sombras chan struct{}
+	// ctxSombras é o contexto dos shadows, independente da requisição (o cliente sair não os
+	// cancela) e cancelado no desligamento quando o prazo acaba.
+	ctxSombras   context.Context
+	pararSombras context.CancelFunc
 
 	limMu   sync.Mutex
 	limites map[int64]*rate.Limiter
@@ -89,6 +93,7 @@ func Novo(d Deps) (*Servidor, error) {
 		entreChunks:   cmp.Or(t.EntreChunks(), 60*time.Second),
 		total:         cmp.Or(t.Total(), 10*time.Minute),
 	}
+	s.ctxSombras, s.pararSombras = context.WithCancel(context.Background())
 	ctx := context.Background()
 	if err := s.Recarregar(ctx); err != nil {
 		return nil, err
@@ -129,8 +134,18 @@ func (s *Servidor) Recarregar(ctx context.Context) error {
 	return nil
 }
 
-// Esperar aguarda as chamadas shadow em andamento (shutdown gracioso e testes).
-func (s *Servidor) Esperar() { s.bg.Wait() }
+// Encerrar espera os shadows em andamento até o prazo de ctx. Passado o prazo, cancela os que
+// restam e espera eles registrarem o uso (saem logo depois do cancelamento).
+func (s *Servidor) Encerrar(ctx context.Context) {
+	fim := make(chan struct{})
+	go func() { s.bg.Wait(); close(fim) }()
+	select {
+	case <-fim:
+	case <-ctx.Done():
+		s.pararSombras()
+		<-fim
+	}
+}
 
 func (s *Servidor) Handler() http.Handler {
 	mux := http.NewServeMux()
