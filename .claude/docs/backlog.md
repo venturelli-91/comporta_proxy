@@ -41,3 +41,15 @@ Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pag
 | `internal/cache/cache.go` | Mutex global | Disputa aparecer no profile → shards |
 | `internal/armazenamento/uso.go` | Relatório varre a tabela bruta | Consulta lenta no profile → `uso_minuto` |
 | `.claude/docs/arquitetura/frontend.md` | Sem react-router | Rotas aninhadas ou links profundos |
+
+## Achados menores da revisão final (09/10) — adiados
+- [ ] M-1 `Recarregar` concorrente pode gravar snapshot antigo (revogação desfeita até a próxima mutação): mutex em volta de `Recarregar`
+- [ ] M-2 Lote de uso que falha ao gravar some sem log: logar e somar em `descartados`
+- [ ] M-3 Shutdown espera shadows sem limite: contexto do servidor cancelado no SIGTERM + prazo de ~8 s
+- [ ] M-4 Stream restaura só `delta.content`; `reasoning_content` da DeepSeek fica mascarado
+- [ ] M-5 Revogar chave ignora o cliente do path: `AND cliente_id = ?`
+- [ ] M-6 Resposta sem stream acima de 16 MiB é truncada e volta 200: ler `max+1` e devolver 502
+- [ ] M-7 Painel shadow compara tamanho SSE × JSON: medir tamanho do conteúdo
+- [ ] M-8 Cookie admin não revogável no servidor, `Secure` atrás do TLS do Cloud Run, sem limite de tentativas, token padrão no compose
+- [ ] M-9 Teste de desconexão não confere o status 499 explicitamente
+- [ ] M-10 Sessão expirada não volta para o login no painel (invalidar `sessao` num 401)
