@@ -39,3 +39,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 10/10 | Demo pública | `feat` | Render free (sem cartão) via render.yaml; DEMO_CHAVE recria o cliente demo a cada disco zerado; nunca DEEPSEEK_API_KEY lá |
 | 10/10 | Menores da revisão de 10/10 | `fix`/`test` | custo estimado para resposta grande; raciocínio retido sai antes do content; login paralelo exige 5; XFF+LB documentado |
 | 10/10 | M-2, M-9, M-10 | `fix`/`test` | lote de uso perdido vai para descartados + log; 499 conferido na tabela; 401 em qualquer tela volta ao login (QueryCache/MutationCache) |
+| 10/10 | Painel refinado | `feat(web)`/`feat(httpapi)` | tema claro/escuro/sistema; ponteiros; cartões, selos, esqueletos, ícones; Playground antes/depois via X-Comporta-Enviado; conferido no Chrome |

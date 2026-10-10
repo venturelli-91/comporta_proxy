@@ -96,6 +96,7 @@ Ordem importa: autenticação e admissão vêm **antes** de qualquer trabalho ca
 
 1. **Cache exato do gateway** (resposta inteira):
    - Opt-in: header `X-Comporta-Cache: ligado` ou política do cliente. Com raciocínio ativo, a mesma pergunta gera respostas diferentes; reaproveitar precisa ser escolha explícita.
+- **`X-Comporta-Enviado`** (resposta, só para cliente com LGPD): a última mensagem do usuário como saiu para o provedor, já mascarada, em base64 e cortada em 2 KB. Vai num cabeçalho para não mudar o corpo no formato OpenAI que os SDKs esperam; o Playground usa para mostrar o antes e depois.
    - Chave: `sha256(escopo + modelo + mensagens já mascaradas + parâmetros relevantes)`. O escopo padrão é **por cliente** (evita um cliente ver resposta de outro).
    - LRU com TTL e limite de memória (o LRU genérico do laboratório da apostila serve de base).
    - Respostas em stream são guardadas inteiras e devolvidas em **replay SSE**.

@@ -14,7 +14,7 @@ verdade, então não há custo nem dado real.
 1. Abra **[comporta.onrender.com](https://comporta.onrender.com)** e entre com o token **`demo-comporta`**.
 2. Vá em **Playground**, cole a chave **`ck_demo_comporta`** e mande algo como
    `meu CPF é 529.982.247-25 e o e-mail ana@exemplo.com`.
-3. A resposta volta com os dados originais, mas o provedor só viu `[CPF_1]` e `[EMAIL_1]`. A **Visão geral**
+3. O cartão **O que o provedor recebeu** mostra `[CPF_1]` e `[EMAIL_1]`; o **O que voltou para você** traz os dados originais. A **Visão geral**
    mostra a requisição, o custo estimado e os dados pessoais mascarados.
 
 Pela API, com qualquer SDK compatível com OpenAI:
