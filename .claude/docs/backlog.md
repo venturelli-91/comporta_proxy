@@ -57,15 +57,15 @@ Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pag
 
 ## Achados menores da revisão final (09/10) — adiados
 - [x] M-1 `Recarregar` concorrente pode gravar snapshot antigo (revogação desfeita até a próxima mutação): mutex em volta de `Recarregar` (resolvido 10/10)
-- [ ] M-2 Lote de uso que falha ao gravar some sem log: logar e somar em `descartados`
+- [x] M-2 Lote de uso que falha ao gravar some sem log: logar e somar em `descartados` (resolvido 10/10)
 - [x] M-3 Shutdown espera shadows sem limite: contexto do servidor cancelado no SIGTERM + prazo de ~8 s (resolvido 10/10)
 - [x] M-4 Stream restaura só `delta.content`; `reasoning_content` da DeepSeek fica mascarado (resolvido 10/10)
 - [x] M-5 (resolvido 10/10) Revogar chave ignora o cliente do path: `AND cliente_id = ?`
 - [x] M-6 Resposta sem stream acima de 16 MiB é truncada e volta 200: ler `max+1` e devolver 502 (resolvido 10/10)
 - [ ] M-7 Painel shadow compara tamanho SSE × JSON: medir tamanho do conteúdo
 - [x] M-8 (resolvido 09/10: sessão aleatória revogável, limite de login, Secure atrás de proxy, compose sem token padrão) Cookie admin não revogável no servidor, `Secure` atrás do TLS do Cloud Run, sem limite de tentativas, token padrão no compose
-- [ ] M-9 Teste de desconexão não confere o status 499 explicitamente
-- [ ] M-10 Sessão expirada não volta para o login no painel (invalidar `sessao` num 401)
+- [x] M-9 Teste de desconexão não confere o status 499 explicitamente (resolvido 10/10)
+- [x] M-10 Sessão expirada não volta para o login no painel (invalidar `sessao` num 401) (resolvido 10/10)
 
 ## Achados menores da revisão de 10/10 — adiados
 - [x] Resposta acima de 16 MiB vira 502 com custo 0, mas o provedor cobrou: estimar como no stream cortado (resolvido 10/10)

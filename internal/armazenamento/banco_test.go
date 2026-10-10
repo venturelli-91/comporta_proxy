@@ -223,3 +223,20 @@ func TestSemearDemo(t *testing.T) {
 		t.Fatal("chave sem ck_ seria recusada pela autenticação: o seed tem de recusar também")
 	}
 }
+
+// Um lote que falha ao gravar não pode sumir em silêncio: entra em descartados (que vai para
+// o /metrics) para a perda de registros de uso aparecer.
+func TestGravadorContaLoteQueFalha(t *testing.T) {
+	b := abrir(t)
+	g := NovoGravador(b, 100)
+	for range 3 {
+		g.Registrar(Evento{TS: time.Now(), ClienteID: 1, Modelo: "rapido", Status: 200})
+	}
+	b.Fechar() // toda escrita falha daqui em diante
+	ctxRodar, parar := context.WithCancel(ctx)
+	parar() // drena e grava o lote final de uma vez
+	g.Rodar(ctxRodar)
+	if n := g.Descartados(); n != 3 {
+		t.Fatalf("descartados = %d, queria 3", n)
+	}
+}
