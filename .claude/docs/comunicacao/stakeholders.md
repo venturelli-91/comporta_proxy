@@ -21,5 +21,11 @@ Quando vários times passam a usar IA, quatro coisas acontecem:
 ## Limites (dito com honestidade)
 A proteção de dados reconhece formatos conhecidos. Nomes e endereços não são detectados. Ela reduz o risco, mas sozinha não garante conformidade com a LGPD.
 
-## Status
-Ver `.claude/docs/backlog.md`. Meta: MVP funcionando e medido até 13/10/2026.
+## Status (09/10/2026)
+O MVP está pronto e medido, quatro dias antes da meta (13/10):
+- Aguenta **1.000 chamadas por segundo** acrescentando menos de **2 milésimos de segundo** a cada uma.
+- Quando a mesma pergunta se repete, a resposta vem da memória: **99,9% das chamadas pagas evitadas** no teste.
+- Com o fornecedor de IA **falhando metade das vezes**, **98,4%** das chamadas ainda terminaram bem.
+- Em todos os testes, CPF e e-mail saíram trocados por códigos e voltaram corretos para o usuário.
+
+Próximos passos (depois de 14/10): rodar várias cópias ao mesmo tempo na nuvem (Google Cloud) e alertas de orçamento.

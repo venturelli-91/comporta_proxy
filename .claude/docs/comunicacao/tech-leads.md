@@ -18,5 +18,9 @@ Gateway de LLM em Go (stdlib `net/http`), API compatível com OpenAI, uma instâ
 - Singleflight com stream: os seguidores recebem a resposta inteira de uma vez, não ao vivo (fanout fica no backlog).
 - Escalar horizontalmente exige Redis para o rate limit, o orçamento e o cache.
 
+## Resultado (09/10)
+12 commits por feature no branch `feat/mvp`. `go test -race ./...` verde, 2 fuzz tests, testes de integração para
+todos os códigos de erro, k6 em 3 cenários (README). Overhead ~1,7 ms no p95; caos com 50% de 503 → 98,4% de sucesso.
+
 ## Como validar
 `go test -race ./...`, `BenchmarkOverhead` e os três cenários do k6 em `carga/`. Os números vão para o README.

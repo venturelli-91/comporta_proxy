@@ -14,7 +14,7 @@ Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 - [x] 09 Binário + Docker + compose
 - [x] 10 Painel React
 - [x] 11 k6 contra o falso, números no README
-- [ ] 12 Auditoria ponytail, README, PR
+- [x] 12 Auditoria ponytail, README, PR
 
 ## Depois da entrevista (P1/P2)
 - [ ] Rate limit por tokens estimados com reconciliação pelo `usage`
@@ -28,4 +28,16 @@ Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 - [ ] Cache semântico, com limiar alto e medição de acertos falsos
 
 ## Dívida deliberada (`// ponytail:`)
-Preenchida pelo `ponytail:ponytail-debt` no fim do MVP.
+Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pagar.
+
+| Onde | Atalho | Pagar quando |
+|---|---|---|
+| `internal/httpapi/servidor.go` | Orçamento (gasto do mês) em memória | Mais de uma instância → Redis |
+| `internal/httpapi/chat.go` | Seguidores do singleflight recebem replay, não stream ao vivo | TTFT de requisições cacheáveis importar → fanout |
+| `internal/httpapi/relay.go` | Um restaurador LGPD para todas as choices | Cliente usar `n > 1` |
+| `internal/httpapi/relay.go` | Content multimodal (partes) não é mascarado | Cliente mandar imagem ou partes |
+| `internal/httpapi/metricas.go` | Contadores próprios, sem labels | Prometheus/Grafana de verdade → client oficial |
+| `internal/gateway/roteador.go` | `Estado()` sem ocupação do semáforo | Junto com as métricas Prometheus |
+| `internal/cache/cache.go` | Mutex global | Disputa aparecer no profile → shards |
+| `internal/armazenamento/uso.go` | Relatório varre a tabela bruta | Consulta lenta no profile → `uso_minuto` |
+| `.claude/docs/arquitetura/frontend.md` | Sem react-router | Rotas aninhadas ou links profundos |
