@@ -35,7 +35,7 @@ func (s *Servidor) rotasAdmin(mux *http.ServeMux) {
 func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	// Allow() confere e consome num passo só: tentativas paralelas não passam juntas pela checagem.
 	// O login certo também gasta um token; como o limite é por IP, o atacante não tranca o admin.
-	if !s.limiteLogin(ipDe(r)).Allow() {
+	if !s.limiteLogin(s.ipDe(r)).Allow() {
 		retryAfter(w, time.Minute)
 		erro(w, http.StatusTooManyRequests, "muitas_tentativas", "muitas tentativas de login, aguarde um minuto")
 		return
@@ -70,14 +70,12 @@ func (s *Servidor) limiteLogin(ip string) *rate.Limiter {
 	return l
 }
 
-// ipDe usa a última entrada do X-Forwarded-For, que é a que o proxy confiável (o front-end do
-// Cloud Run) acrescenta; o cliente só consegue forjar as anteriores. Sem proxy na frente, o
-// cabeçalho inteiro é forjável e o limite vira só um obstáculo: a proteção real é o token
-// ter entropia alta (o gerado pelo binário tem 128 bits).
-func ipDe(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		partes := strings.Split(xff, ",")
-		return strings.TrimSpace(partes[len(partes)-1])
+// ipDe usa a última entrada do X-Forwarded-For, a que o proxy confiável (o front-end do Cloud
+// Run) acrescenta; o cliente só forja as anteriores. Sem esse proxy o cabeçalho inteiro é do
+// cliente, que ganharia um balde novo a cada tentativa: aí vale o endereço da conexão.
+func (s *Servidor) ipDe(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); s.d.ConfiarProxy && xff != "" {
+		return strings.TrimSpace(xff[strings.LastIndex(xff, ",")+1:])
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

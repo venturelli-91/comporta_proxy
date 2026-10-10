@@ -32,6 +32,9 @@ type Deps struct {
 	AdminToken string
 	Painel     fs.FS // nil = sem painel
 	Log        *slog.Logger
+	// ConfiarProxy: há um proxy na frente (Cloud Run) que acrescenta o IP real ao X-Forwarded-For.
+	// Sem ele, o cabeçalho é do cliente e não serve para identificar ninguém.
+	ConfiarProxy bool
 }
 
 // snapshot é tudo que a autenticação lê em cada requisição. É trocado inteiro (atomic.Pointer)

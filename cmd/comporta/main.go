@@ -92,6 +92,8 @@ func rodar(log *slog.Logger) error {
 	srv, err := httpapi.Novo(httpapi.Deps{
 		Config: cfg, Roteador: gateway.NovoRoteador(cfg, clientes), Banco: banco, Gravador: gravador,
 		Cache: cache.Novo(mb<<20, ttl), AdminToken: adminToken, Painel: web.Painel(), Log: log,
+		// K_SERVICE é definido pelo Cloud Run; TRUST_PROXY=1 para outro proxy confiável na frente.
+		ConfiarProxy: os.Getenv("K_SERVICE") != "" || os.Getenv("TRUST_PROXY") == "1",
 	})
 	if err != nil {
 		return err

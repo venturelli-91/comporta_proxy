@@ -120,7 +120,8 @@ func novoCenario(t testing.TB) *cenario {
 	c.s, err = Novo(Deps{
 		Config: cfg, Roteador: gateway.NovoRoteador(cfg, clientes), Banco: b, Gravador: g,
 		Cache: cache.Novo(1<<20, time.Minute), AdminToken: tokenAdmin,
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ConfiarProxy: true, // os testes simulam o Cloud Run: o XFF separa os IPs
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -672,5 +673,32 @@ func TestCookieSecureAtrasDeProxy(t *testing.T) {
 	ck := c.login(tokenAdmin, "X-Forwarded-Proto", "https").Cookies()[0]
 	if !ck.Secure || !ck.HttpOnly || ck.SameSite != http.SameSiteStrictMode {
 		t.Fatalf("cookie = %+v", ck)
+	}
+}
+
+// Sem proxy confiável na frente, o XFF é do cliente: trocá-lo não pode render um balde novo.
+func TestIPDe(t *testing.T) {
+	casos := []struct {
+		nome    string
+		confiar bool
+		xff     string
+		quer    string
+	}{
+		{"sem proxy ignora xff", false, "1.2.3.4, 203.0.113.9", "192.0.2.1"}, // RemoteAddr do httptest
+		{"cloud run usa a última", true, "1.2.3.4,  203.0.113.9", "203.0.113.9"},
+		{"cloud run entrada única", true, "203.0.113.9", "203.0.113.9"},
+		{"cloud run sem xff", true, "", "192.0.2.1"},
+	}
+	for _, tc := range casos {
+		t.Run(tc.nome, func(t *testing.T) {
+			s := &Servidor{d: Deps{ConfiarProxy: tc.confiar}}
+			r := httptest.NewRequest("POST", "/admin/login", nil)
+			if tc.xff != "" {
+				r.Header.Set("X-Forwarded-For", tc.xff)
+			}
+			if got := s.ipDe(r); got != tc.quer {
+				t.Fatalf("ipDe = %q, queria %q", got, tc.quer)
+			}
+		})
 	}
 }
