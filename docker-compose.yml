@@ -1,0 +1,14 @@
+services:
+  comporta:
+    build: .
+    ports: ["8080:8080"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Sem padrão: um token conhecido numa porta publicada abriria o painel para qualquer um.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?defina ADMIN_TOKEN no .env (copie o .env.example)}
+    volumes:
+      - dados:/dados
+volumes:
+  dados: {}

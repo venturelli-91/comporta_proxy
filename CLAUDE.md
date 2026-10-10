@@ -167,29 +167,25 @@ Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_
 
 ## Roadmap
 
-**MVP até 13/10 (prioridade para a entrevista):**
-- [ ] Provedor falso (latência e falhas configuráveis) + provedor DeepSeek, atrás da interface `Provedor`
-- [ ] `POST /v1/chat/completions` compatível com OpenAI, sem e com streaming
-- [ ] Chaves por cliente (hash no SQLite) + middleware de autenticação
-- [ ] Rate limit por cliente (token bucket)
-- [ ] Cache TTL + singleflight, com teste provando 1 chamada para N pedidos iguais simultâneos
-- [ ] Timeout + retry com backoff/jitter + circuit breaker no provedor
-- [ ] Registro de uso (tokens, custo estimado, latência, cache hit), gravado em lote
-- [ ] Painel React: tabela de uso por cliente, cache hit rate, custo, latência p95, playground
-- [ ] k6 contra o provedor falso: números no README (req/s, p95, quanto o cache economiza)
-- [ ] README de portfólio com GIF, arquitetura, decisões e números
+**MVP até 13/10 — feito em 09/10 (branch `feat/mvp`), um commit por feature:**
+- [x] Provedor falso (latência e falhas configuráveis) + cliente compatível com OpenAI (DeepSeek)
+- [x] `POST /v1/chat/completions` compatível com OpenAI, sem e com streaming
+- [x] Chaves por cliente (hash no SQLite) + middleware de autenticação
+- [x] Rate limit por cliente (token bucket)
+- [x] Cache TTL + singleflight, com teste provando 1 chamada para N pedidos iguais simultâneos
+- [x] Timeout + retry com backoff/jitter + circuit breaker no provedor
+- [x] Registro de uso (tokens, custo estimado, latência, cache hit), gravado em lote
+- [x] Painel React: uso por cliente, cache, custo, latência p95, shadow, playground
+- [x] k6 contra o provedor falso: números no README
+- [x] README de portfólio com screenshot, arquitetura, decisões e números
+- [x] Mascaramento LGPD com table-driven + fuzz test, **inclusive no streaming**
+- [x] Orçamento mensal por cliente (402), fallback entre destinos e modo shadow com comparação
 
-**Se sobrar tempo antes da entrevista (senão, primeiro item depois):**
-- [ ] Mascaramento LGPD (sem streaming primeiro), com table-driven + fuzz test
-
-**Depois da entrevista:**
-- [ ] Restauração LGPD no streaming (buffer para marcadores quebrados)
-- [ ] Orçamento mensal por cliente (402) e alertas
-- [ ] Fallback entre modelos/provedores e modo shadow com relatório comparativo
-- [ ] Métricas Prometheus + tracing OpenTelemetry
-- [ ] Postgres + Redis (cache e rate limit compartilhados entre várias instâncias)
+**Depois da entrevista:** ver `.claude/docs/backlog.md` (inclui a dívida deliberada `ponytail:`).
+- [ ] Métricas Prometheus com labels + tracing OpenTelemetry
+- [ ] Postgres + Redis (cache, rate limit e orçamento compartilhados entre várias instâncias)
 - [ ] Deploy no Cloud Run com Secret Manager
-- [ ] Cache semântico (perguntas parecidas, não só idênticas), com cuidado e medição
+- [ ] Rate limit por tokens estimados, alertas de orçamento, cache semântico (com medição)
 
 ## Decisões (registre aqui as novas, com o porquê)
 
@@ -203,6 +199,17 @@ Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_
 - **Uso gravado em lote:** não pôr uma escrita no banco no caminho crítico de cada requisição.
 - **Mascarar antes de cachear:** o cache e os logs nunca veem dado pessoal.
 - **Validar dígito verificador de CPF/CNPJ:** menos falsos positivos do que regex pura.
+- **Um cliente HTTP compatível com OpenAI, sem interface `Provedor`:** DeepSeek e "openaicompat" diferem
+  só na base_url; o falso é um `http.Handler` do mesmo protocolo e exercita o código de rede real.
+- **Sem interface `Repositorio`:** uma implementação só (SQLite). A interface nasce no consumidor
+  quando o Postgres chegar.
+- **Retry dentro do circuit breaker; 4xx do cliente não abre o breaker; cancelamento é excluído.**
+- **Marcador LGPD nunca colide com texto do usuário** (`[CPF_1]` literal → o CPF real vira `[CPF_2]`):
+  garante `Restaurar(Mascarar(s)) == s`, provado por fuzz.
+- **Shadow só no caminho sem cache:** comparar uma resposta reaproveitada não mede nada e paga uma chamada.
+- **Singleflight com `context.WithoutCancel`:** o líder desconectar não derruba quem espera a mesma resposta.
+- **Cookie do admin guarda o hash do token**, `HttpOnly; SameSite=Strict`; comparação em tempo constante.
+- **Commits em português (Conventional Commits)** neste repositório, prevalecendo sobre a regra global.
 
 ## Pitch de 30 segundos para a entrevista
 
@@ -210,6 +217,7 @@ Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_
 custo sob controle. Ele mascara CPF, e-mail e telefone antes de enviar ao provedor e restaura na
 volta. Cada aplicação tem sua chave, limite e orçamento; requisições iguais são cacheadas e deduplicadas com singleflight;
 o provedor é protegido por timeout, retry e circuit breaker; e um modo shadow permite migrar de
-modelo comparando os dois sem afetar o usuário. Medi com k6: [X] req/s com p95 de [Y] ms, e o
-cache reduziu [Z]% das chamadas pagas. É o mesmo tipo de problema de um proxy que atende várias
+modelo comparando os dois sem afetar o usuário. Medi com k6: 1.000 req/s com p95 de 61,7 ms contra
+um provedor de 60 ms (1,7 ms de overhead), o cache evitou 99,9% das chamadas pagas num cenário repetitivo, e
+com o provedor falhando metade das vezes 98,4% das requisições terminaram bem. É o mesmo tipo de problema de um proxy que atende várias
 aplicações clientes e precisa buscar dados externos de forma eficiente."

@@ -1,0 +1,9 @@
+.git
+.env
+*.db*
+web/node_modules
+carga/resultados
+venturelli-house
+.superpowers
+.impeccable
+web/dist

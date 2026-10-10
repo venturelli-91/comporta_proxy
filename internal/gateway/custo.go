@@ -14,8 +14,8 @@ type Uso struct {
 	} `json:"completion_tokens_details"`
 }
 
-// Custo devolve o custo em micro-dólares. Modelo sem preço custa 0: melhor registrar a
-// chamada sem custo do que derrubar a requisição por falta de config.
+// Custo devolve o custo em micro-dólares. Carregar já recusa modelo de destino sem preço
+// (custaria 0 e furaria o orçamento); o 0 aqui só aparece em configs montadas à mão nos testes.
 func (c *Config) Custo(modelo string, u Uso, t time.Time) int64 {
 	p, ok := c.preco(modelo)
 	if !ok {

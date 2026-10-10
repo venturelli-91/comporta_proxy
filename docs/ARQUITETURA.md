@@ -14,7 +14,7 @@
 | Streaming | relay linha a linha com `bufio.Reader` e flush por evento | latência do primeiro token preservada; restauração de PII e captura de `usage` no caminho |
 | Retry e fallback | só **antes do primeiro byte** enviado ao cliente | depois que o stream começou, não dá para "voltar atrás" |
 | Proteção do provedor | semáforo de concorrência por modelo + limite por cliente + circuit breaker (`sony/gobreaker/v2`) | a DeepSeek limita concorrência por conta (seção 3) |
-| Rate limit | por **tokens estimados** (não só requisições), com reconciliação pelo `usage` | requisições de LLM variam de 10 a 100 mil tokens |
+| Rate limit | MVP: **requisições/min** por cliente (token bucket, `x/time/rate`). Próximo passo: tokens estimados com reconciliação pelo `usage` | requisições de LLM variam de 10 a 100 mil tokens; o MVP limita volume, o orçamento (402) limita gasto |
 | Cache do gateway | exato, **opt-in**, LRU + TTL em memória + `singleflight` | modelos com raciocínio ativo por padrão não são determinísticos |
 | Cache do provedor | preservar prefixos estáveis e **medir** `prompt_cache_hit_tokens` | o cache de prefixo da DeepSeek é automático e barateia muito a entrada |
 | Registro de uso | channel com buffer + gravação em lote (SQLite WAL); descarta e conta se lotar | nada de escrita em banco no caminho crítico |
@@ -22,6 +22,16 @@
 | Front | React + Vite + TS, TanStack Query, Recharts; servido pelo próprio Go com `//go:embed` | um único binário para deploy |
 | Playground com streaming | `fetch` + `ReadableStream` (não `EventSource`) | `EventSource` só faz GET e não envia header de autorização |
 | Deploy | container distroless; Cloud Run (GCP) | mesmo ambiente da vaga |
+
+### Estado em 09/10/2026 (branch `feat/mvp`)
+As fases 1 e 2 e o modo shadow da fase 3 estão implementados. Diferenças em relação ao plano acima:
+- **Provedores:** um único cliente HTTP compatível com OpenAI (`internal/provedor`), sem interface `Provedor`. O falso é um `http.Handler` do mesmo protocolo.
+- **Semáforo:** por alias (`concorrencia` no `comporta.json`), liberado só quando o corpo da resposta é fechado (fim do stream).
+- **Breaker:** abre com ≥ 5 chamadas e ≥ 50% de falhas; o retry fica dentro dele; 4xx do cliente conta como sucesso; cancelamento é excluído.
+- **Singleflight:** o líder lê a resposta inteira e todos recebem replay (sem fanout ao vivo).
+- **Shadow:** só no caminho sem cache; chamada sem stream, contexto próprio, comparação em `/admin/uso`.
+- **Sem `Repositorio`, sem `uso_minuto`:** o relatório varre a tabela bruta (dívida registrada em `.claude/docs/backlog.md`).
+- **Números medidos:** README e `.claude/docs/features/11-carga.md`.
 
 ## 2. O que dá para aprender com os gateways existentes
 

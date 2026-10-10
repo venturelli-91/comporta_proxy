@@ -40,6 +40,14 @@ type Destino struct {
 	Modelo   string `json:"modelo"`
 }
 
+// todos devolve os destinos mais o shadow, sem alterar o slice da config.
+func (m ModeloCfg) todos() []Destino {
+	if m.Shadow == nil {
+		return m.Destinos
+	}
+	return append(m.Destinos[:len(m.Destinos):len(m.Destinos)], *m.Shadow)
+}
+
 func (d Destino) String() string { return d.Provedor + "/" + d.Modelo }
 
 // PrecoCfg vem em US$ por 1 milhão de tokens, como nas tabelas dos provedores.
@@ -101,13 +109,13 @@ func (c *Config) validar() error {
 		if len(m.Destinos) == 0 {
 			return fmt.Errorf("config: modelo %q sem destinos", alias)
 		}
-		todos := m.Destinos
-		if m.Shadow != nil {
-			todos = append(todos[:len(todos):len(todos)], *m.Shadow)
-		}
-		for _, d := range todos {
+		for _, d := range m.todos() {
 			if _, ok := c.Provedores[d.Provedor]; !ok {
 				return fmt.Errorf("config: modelo %q usa provedor desconhecido %q", alias, d.Provedor)
+			}
+			// Sem preço a chamada custaria 0 e nunca consumiria o orçamento do cliente.
+			if _, ok := c.Precos[d.Modelo]; !ok {
+				return fmt.Errorf("config: modelo %q usa %q sem preço em \"precos\"", alias, d.Modelo)
 			}
 		}
 	}
