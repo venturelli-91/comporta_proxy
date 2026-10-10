@@ -2,7 +2,12 @@ module github.com/venturelli-91/comporta_proxy
 
 go 1.26.0
 
-require github.com/sony/gobreaker/v2 v2.4.0
+require (
+	github.com/sony/gobreaker/v2 v2.4.0
+	golang.org/x/sync v0.24.0
+	golang.org/x/time v0.16.0
+	modernc.org/sqlite v1.60.1
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -14,5 +19,4 @@ require (
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
-	modernc.org/sqlite v1.60.1 // indirect
 )
