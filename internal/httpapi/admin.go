@@ -203,8 +203,12 @@ func (s *Servidor) criarChave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Servidor) revogarChave(w http.ResponseWriter, r *http.Request) {
+	cliente, ok := idDe(w, r, "id")
+	if !ok {
+		return
+	}
 	if id, ok := idDe(w, r, "chave"); ok {
-		s.mutou(w, r, s.d.Banco.RevogarChave(r.Context(), id), http.StatusNoContent, nil)
+		s.mutou(w, r, s.d.Banco.RevogarChave(r.Context(), cliente, id), http.StatusNoContent, nil)
 	}
 }
 

@@ -2,6 +2,7 @@ package armazenamento
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -73,7 +74,14 @@ func TestRevogarChave(t *testing.T) {
 	b := abrir(t)
 	c, _ := b.CriarCliente(ctx, Cliente{Nome: "app"})
 	_, chave, _ := b.CriarChave(ctx, c.ID)
-	if err := b.RevogarChave(ctx, chave.ID); err != nil {
+	outro, _ := b.CriarCliente(ctx, Cliente{Nome: "outro"})
+	if err := b.RevogarChave(ctx, outro.ID, chave.ID); !errors.Is(err, ErrNaoEncontrado) {
+		t.Fatalf("revogar pela rota de outro cliente: err = %v, queria ErrNaoEncontrado", err)
+	}
+	if ativas, _ := b.ChavesAtivas(ctx); len(ativas) != 1 {
+		t.Fatal("a chave foi revogada pela rota de outro cliente")
+	}
+	if err := b.RevogarChave(ctx, c.ID, chave.ID); err != nil {
 		t.Fatal(err)
 	}
 	if ativas, _ := b.ChavesAtivas(ctx); len(ativas) != 0 {
