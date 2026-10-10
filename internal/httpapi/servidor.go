@@ -48,12 +48,20 @@ type snapshot struct {
 type Servidor struct {
 	d    Deps
 	snap atomic.Pointer[snapshot]
-	sf   singleflight.Group
-	met  contadores
-	bg   sync.WaitGroup // shadows em andamento
+	// recMu serializa Recarregar; antesDeTrocar é um gancho só de teste (nil em produção).
+	recMu         sync.Mutex
+	antesDeTrocar func()
+	sf            singleflight.Group
+	met           contadores
+	bg            sync.WaitGroup // shadows em andamento
+	ativos        sync.WaitGroup // requisições em andamento (para o desligamento esperar o registro de uso)
 	// sombras limita os shadows simultâneos: tráfego de comparação não pode disputar o limite
 	// de concorrência da conta com o tráfego real. Sem vaga, o shadow é descartado e contado.
 	sombras chan struct{}
+	// ctxSombras é o contexto dos shadows, independente da requisição (o cliente sair não os
+	// cancela) e cancelado no desligamento quando o prazo acaba.
+	ctxSombras   context.Context
+	pararSombras context.CancelFunc
 
 	limMu   sync.Mutex
 	limites map[int64]*rate.Limiter
@@ -86,6 +94,7 @@ func Novo(d Deps) (*Servidor, error) {
 		entreChunks:   cmp.Or(t.EntreChunks(), 60*time.Second),
 		total:         cmp.Or(t.Total(), 10*time.Minute),
 	}
+	s.ctxSombras, s.pararSombras = context.WithCancel(context.Background())
 	ctx := context.Background()
 	if err := s.Recarregar(ctx); err != nil {
 		return nil, err
@@ -101,8 +110,12 @@ func Novo(d Deps) (*Servidor, error) {
 	return s, nil
 }
 
-// Recarregar relê clientes e chaves e troca o snapshot.
+// Recarregar relê clientes e chaves e troca o snapshot. A leitura e a troca acontecem sob o
+// mesmo lock: sem isso, um Recarregar que leu antes de uma revogação poderia gravar depois
+// de quem leu depois dela, e a chave revogada voltaria a valer.
 func (s *Servidor) Recarregar(ctx context.Context) error {
+	s.recMu.Lock()
+	defer s.recMu.Unlock()
 	clientes, err := s.d.Banco.ListarClientes(ctx)
 	if err != nil {
 		return err
@@ -115,12 +128,27 @@ func (s *Servidor) Recarregar(ctx context.Context) error {
 	for _, c := range clientes {
 		sn.clientes[c.ID] = c
 	}
+	if s.antesDeTrocar != nil {
+		s.antesDeTrocar()
+	}
 	s.snap.Store(sn)
 	return nil
 }
 
-// Esperar aguarda as chamadas shadow em andamento (shutdown gracioso e testes).
-func (s *Servidor) Esperar() { s.bg.Wait() }
+// Encerrar espera as requisições e depois os shadows em andamento até o prazo de ctx. Passado
+// o prazo, cancela os shadows que restam e espera todos registrarem o uso (saem logo depois do
+// cancelamento). As requisições vêm primeiro: só elas disparam shadows, então depois delas
+// nenhum bg.Go corre junto com o bg.Wait. Quem chama corta as conexões antes (h.Close).
+func (s *Servidor) Encerrar(ctx context.Context) {
+	fim := make(chan struct{})
+	go func() { s.ativos.Wait(); s.bg.Wait(); close(fim) }()
+	select {
+	case <-fim:
+	case <-ctx.Done():
+		s.pararSombras()
+		<-fim
+	}
+}
 
 func (s *Servidor) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -181,6 +209,8 @@ func (s *Servidor) base(h http.Handler) http.Handler {
 			id = rand.Text()[:16]
 		}
 		w.Header().Set("X-Request-Id", id)
+		s.ativos.Add(1)
+		defer s.ativos.Done()
 		reg := &registro{ResponseWriter: w}
 		inicio := time.Now()
 		defer func() {

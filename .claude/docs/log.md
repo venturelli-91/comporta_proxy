@@ -32,3 +32,7 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 10/10 | Segurança do login | `fix(httpapi)` | Allow() na entrada (20 paralelas → ≤5 comparadas); XFF só com K_SERVICE/TRUST_PROXY; poda só limitadores cheios |
 | 10/10 | M-5 | `fix(armazenamento)` | revogar chave exige cliente_id do path |
 | 10/10 | Cortes ponytail | `refactor` | cmp.Or, slices.SortFunc, sem struct limitador: -18 linhas |
+| 10/10 | M-1 | `fix(httpapi)` | Recarregar sob mutex; teste determinístico com gancho entre leitura e troca (sync.Once escondia a corrida) |
+| 10/10 | M-6 | `fix(httpapi)` | lerResposta lê max+1: acima de 16 MiB vira 502 e não entra no cache |
+| 10/10 | M-4 | `fix(httpapi)` | um restaurador LGPD por campo do delta (content e reasoning_content) |
+| 10/10 | M-3 | `fix(httpapi)` | Encerrar(ctx) cancela shadows presos no prazo; shutdown em 8 s (Cloud Run mata em 10 s) |

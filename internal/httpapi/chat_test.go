@@ -83,7 +83,22 @@ func novoCenario(t testing.TB) *cenario {
 		_, _ = io.Copy(io.Discard, r.Body)
 		<-r.Context().Done()
 	})
-	servidores := map[string]http.Handler{"falso": c.espiao, "ruim": &provedor.Falso{TaxaErro: 1}, "lento": lento, "mudo": mudo}
+	// gigante responde um corpo 1 byte acima do teto de leitura.
+	gigante := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(bytes.Repeat([]byte("a"), maxResposta+1))
+	})
+	// pensador manda o raciocínio com o marcador [CPF_1] partido entre dois chunks, como a DeepSeek.
+	pensador := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, d := range []string{`{"reasoning_content":"o CPF é [CP"}`, `{"reasoning_content":"F_1] mesmo"}`, `{"content":"ok"}`} {
+			fmt.Fprintf(w, "data: {\"choices\":[{\"index\":0,\"delta\":%s}]}\n\n", d)
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	})
+	servidores := map[string]http.Handler{"pensador": pensador, "gigante": gigante, "falso": c.espiao, "ruim": &provedor.Falso{TaxaErro: 1}, "lento": lento, "mudo": mudo}
 	clientes := map[string]*provedor.Cliente{}
 	provs := map[string]gateway.ProvedorCfg{}
 	for nome, h := range servidores {
@@ -100,6 +115,9 @@ func novoCenario(t testing.TB) *cenario {
 			"migracao": {Destinos: []gateway.Destino{{Provedor: "falso", Modelo: "m1"}}, Shadow: &gateway.Destino{Provedor: "falso", Modelo: "m2"}, Concorrencia: 100},
 			"travado":  {Destinos: []gateway.Destino{{Provedor: "lento", Modelo: "m1"}}, Concorrencia: 100},
 			"calado":   {Destinos: []gateway.Destino{{Provedor: "mudo", Modelo: "m1"}}, Concorrencia: 100},
+			"enorme":   {Destinos: []gateway.Destino{{Provedor: "gigante", Modelo: "m1"}}, Concorrencia: 100},
+			"pensa":    {Destinos: []gateway.Destino{{Provedor: "pensador", Modelo: "m1"}}, Concorrencia: 100},
+			"presa":    {Destinos: []gateway.Destino{{Provedor: "falso", Modelo: "m1"}}, Shadow: &gateway.Destino{Provedor: "mudo", Modelo: "m2"}, Concorrencia: 100},
 		},
 		Precos: map[string]gateway.PrecoCfg{"m1": {EntradaCacheMiss: 100, Saida: 1000}, "m2": {EntradaCacheMiss: 200, Saida: 2000}},
 	}
@@ -250,7 +268,7 @@ func erroCodigo(t *testing.T, resp *http.Response) string {
 func (c *cenario) relatorio() armazenamento.Relatorio {
 	c.t.Helper()
 	c.http.Close()
-	c.s.Esperar()
+	c.s.Encerrar(context.Background())
 	c.pararUso()
 	r, err := c.banco.Relatorio(context.Background(), time.Now().Add(-time.Hour), time.Now().Add(time.Hour), 0)
 	if err != nil {
@@ -700,5 +718,96 @@ func TestIPDe(t *testing.T) {
 				t.Fatalf("ipDe = %q, queria %q", got, tc.quer)
 			}
 		})
+	}
+}
+
+// Resposta acima do teto não pode chegar cortada com 200, nem entrar no cache.
+func TestRespostaGrandeVira502(t *testing.T) {
+	for _, cache := range []string{"desligado", "ligado"} {
+		t.Run("cache "+cache, func(t *testing.T) {
+			c := novoCenario(t)
+			_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+			resp := c.chat(chave, msg("enorme", "oi", false), "X-Comporta-Cache", cache)
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusBadGateway {
+				t.Fatalf("status %d, queria 502", resp.StatusCode)
+			}
+			if c.s.d.Cache.Bytes() != 0 {
+				t.Fatal("resposta cortada entrou no cache")
+			}
+		})
+	}
+}
+
+// O raciocínio da DeepSeek vem em delta.reasoning_content, com marcadores partidos entre
+// chunks como o content: tem de chegar ao cliente restaurado.
+func TestStreamRestauraRaciocinio(t *testing.T) {
+	c := novoCenario(t)
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja", LGPD: true})
+	resp := c.chat(chave, msg("pensa", "meu CPF é 529.982.247-25", true))
+	defer resp.Body.Close()
+	var raciocinio strings.Builder
+	sc := bufio.NewScanner(resp.Body)
+	for sc.Scan() {
+		dado, ok := strings.CutPrefix(sc.Text(), "data: ")
+		if !ok || dado == "[DONE]" {
+			continue
+		}
+		var v struct {
+			Choices []struct {
+				Delta struct {
+					Reasoning string `json:"reasoning_content"`
+				}
+			}
+		}
+		if json.Unmarshal([]byte(dado), &v) == nil && len(v.Choices) > 0 {
+			raciocinio.WriteString(v.Choices[0].Delta.Reasoning)
+		}
+	}
+	if got := raciocinio.String(); got != "o CPF é 529.982.247-25 mesmo" {
+		t.Fatalf("raciocínio = %q", got)
+	}
+}
+
+// No SIGTERM o Cloud Run espera poucos segundos: um shadow preso num provedor que não
+// responde não pode segurar o desligamento até o prazo total (10 min).
+func TestEncerrarCortaShadowPreso(t *testing.T) {
+	c := novoCenario(t)
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+	conteudo(t, c.chat(chave, msg("presa", "oi", false)))
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	fim := make(chan struct{})
+	inicio := time.Now()
+	go func() { c.s.Encerrar(ctx); close(fim) }()
+	select {
+	case <-fim:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Encerrar não respeitou o prazo: o shadow preso segurou o desligamento")
+	}
+	if d := time.Since(inicio); d > 2*time.Second {
+		t.Fatalf("Encerrar levou %v", d)
+	}
+}
+
+// No desligamento, uma requisição cortada (h.Close cancela o contexto dela) ainda precisa
+// registrar o uso antes de Encerrar voltar: depois disso o gravador é drenado e o processo sai.
+func TestEncerrarEsperaRequisicaoCortada(t *testing.T) {
+	c := novoCenario(t)
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+	req, _ := http.NewRequest("POST", c.url+"/v1/chat/completions", strings.NewReader(msg("calado", "oi", true)))
+	req.Header.Set("Authorization", "Bearer "+chave)
+	go func() {
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			resp.Body.Close()
+		}
+	}()
+	time.Sleep(300 * time.Millisecond) // a requisição entra e fica presa no provedor mudo
+	c.http.CloseClientConnections()    // o que o h.Close() faz com as conexões ativas
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // prazo já estourado, como depois de um Shutdown que não terminou
+	c.s.Encerrar(ctx)
+	if n := c.s.met.requisicoes.Load(); n != 1 {
+		t.Fatalf("requisições registradas = %d, queria 1: Encerrar voltou antes do handler registrar o uso", n)
 	}
 }

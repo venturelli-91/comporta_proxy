@@ -112,13 +112,17 @@ func rodar(log *slog.Logger) error {
 	case <-ctx.Done():
 	}
 	// Shutdown gracioso: para de aceitar, espera as requisições e os shadows, depois drena o uso.
+	// 8 s porque o Cloud Run manda SIGKILL 10 s depois do SIGTERM; sobra tempo para gravar o uso.
 	log.Info("desligando")
-	ctxFim, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctxFim, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	if err := h.Shutdown(ctxFim); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		// Prazo estourado com streams abertos: Close cancela o contexto deles, que cobram o uso
+		// (estimado) e registram antes de sair. Sem isso o processo terminaria no meio deles.
 		log.Warn("shutdown", "erro", err.Error())
+		h.Close()
 	}
-	srv.Esperar()
+	srv.Encerrar(ctxFim)
 	return nil
 }
 

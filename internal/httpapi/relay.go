@@ -54,9 +54,11 @@ func causa(ctx context.Context, err error) error {
 // usage se o cliente pediu. Os cabeçalhos só saem no primeiro dado útil: até lá ainda dá
 // para responder um erro de verdade (504) em vez de um stream vazio.
 func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io.Reader, p *pedido) (gateway.Uso, error) {
-	var st *lgpd.Stream
+	// Um restaurador por campo do delta: content e reasoning_content (raciocínio da DeepSeek) são
+	// textos independentes, e um marcador pode chegar partido em cada um.
+	var sts map[string]*lgpd.Stream
 	if p.mapa.Len() > 0 {
-		st = p.mapa.NovoStream()
+		sts = map[string]*lgpd.Stream{"content": p.mapa.NovoStream(), "reasoning_content": p.mapa.NovoStream()}
 	}
 	rc := http.NewResponseController(w)
 	var uso gateway.Uso
@@ -80,15 +82,17 @@ func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io
 	}
 	// O que ficou retido no restaurador sai num chunk extra antes do [DONE].
 	soltarResto := func() error {
-		if st == nil {
-			return nil
+		delta := map[string]string{}
+		for campo, st := range sts {
+			if resto := st.Finalizar(); resto != "" {
+				delta[campo] = resto
+			}
 		}
-		resto := st.Finalizar()
-		if resto == "" {
+		if len(delta) == 0 {
 			return nil
 		}
 		b, _ := json.Marshal(map[string]any{"object": "chat.completion.chunk",
-			"choices": []any{map[string]any{"index": 0, "delta": map[string]string{"content": resto}}}})
+			"choices": []any{map[string]any{"index": 0, "delta": delta}}})
 		return escrever(b)
 	}
 
@@ -125,8 +129,8 @@ func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io
 				}
 			}
 		}
-		if st != nil {
-			dado = restaurarChunk(dado, st)
+		if sts != nil {
+			dado = restaurarChunk(dado, sts)
 		}
 		if err := escrever(dado); err != nil {
 			return uso, err
@@ -141,9 +145,9 @@ func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io
 	return uso, soltarResto()
 }
 
-// restaurarChunk troca os marcadores no delta.content de um chunk.
+// restaurarChunk troca os marcadores nos campos de texto do delta de um chunk.
 // ponytail: um restaurador para todas as choices; com n > 1 seria um por índice.
-func restaurarChunk(dado []byte, st *lgpd.Stream) []byte {
+func restaurarChunk(dado []byte, sts map[string]*lgpd.Stream) []byte {
 	var v map[string]any
 	d := json.NewDecoder(bytes.NewReader(dado))
 	d.UseNumber() // não transformar ids e timestamps em float
@@ -154,8 +158,10 @@ func restaurarChunk(dado []byte, st *lgpd.Stream) []byte {
 	for _, c := range choices {
 		m, _ := c.(map[string]any)
 		delta, _ := m["delta"].(map[string]any)
-		if t, ok := delta["content"].(string); ok {
-			delta["content"] = st.Escrever(t)
+		for campo, st := range sts {
+			if t, ok := delta[campo].(string); ok {
+				delta[campo] = st.Escrever(t)
+			}
 		}
 	}
 	b, err := json.Marshal(v)

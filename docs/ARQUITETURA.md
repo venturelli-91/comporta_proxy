@@ -29,7 +29,7 @@ As fases 1 e 2 e o modo shadow da fase 3 estão implementados. Diferenças em re
 - **Semáforo:** por alias (`concorrencia` no `comporta.json`), liberado só quando o corpo da resposta é fechado (fim do stream).
 - **Breaker:** abre com ≥ 5 chamadas e ≥ 50% de falhas; o retry fica dentro dele; 4xx do cliente conta como sucesso; cancelamento é excluído.
 - **Singleflight:** o líder lê a resposta inteira e todos recebem replay (sem fanout ao vivo).
-- **Shadow:** só no caminho sem cache; chamada sem stream, contexto próprio, comparação em `/admin/uso`.
+- **Shadow:** só no caminho sem cache; chamada sem stream, contexto próprio, comparação em `/admin/uso`. No desligamento (prazo de 8 s, abaixo dos 10 s do Cloud Run) os shadows presos são cancelados.
 - **Sem `Repositorio`, sem `uso_minuto`:** o relatório varre a tabela bruta (dívida registrada em `.claude/docs/backlog.md`).
 - **Números medidos:** README e `.claude/docs/features/11-carga.md`.
 

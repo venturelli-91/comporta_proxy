@@ -9,7 +9,7 @@ Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 - [x] M-5 revogar chave exige o cliente dono
 - [x] Cortes de stdlib da auditoria ponytail (`cmp.Or`, `slices.SortFunc`, sem struct `limitador`)
 
-Próximo: PR do `fix/login-seguranca` para `main` (o PR #1 já foi mergeado).
+Próximo: deploy no Cloud Run com o provedor falso (antes da entrevista).
 
 ## MVP — até 13/10 (P0)
 - [x] 01 Config em JSON e custo com horário de pico
@@ -55,13 +55,20 @@ Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pag
 | `.claude/docs/arquitetura/frontend.md` | Sem react-router | Rotas aninhadas ou links profundos |
 
 ## Achados menores da revisão final (09/10) — adiados
-- [ ] M-1 `Recarregar` concorrente pode gravar snapshot antigo (revogação desfeita até a próxima mutação): mutex em volta de `Recarregar`
+- [x] M-1 `Recarregar` concorrente pode gravar snapshot antigo (revogação desfeita até a próxima mutação): mutex em volta de `Recarregar` (resolvido 10/10)
 - [ ] M-2 Lote de uso que falha ao gravar some sem log: logar e somar em `descartados`
-- [ ] M-3 Shutdown espera shadows sem limite: contexto do servidor cancelado no SIGTERM + prazo de ~8 s
-- [ ] M-4 Stream restaura só `delta.content`; `reasoning_content` da DeepSeek fica mascarado
+- [x] M-3 Shutdown espera shadows sem limite: contexto do servidor cancelado no SIGTERM + prazo de ~8 s (resolvido 10/10)
+- [x] M-4 Stream restaura só `delta.content`; `reasoning_content` da DeepSeek fica mascarado (resolvido 10/10)
 - [x] M-5 (resolvido 10/10) Revogar chave ignora o cliente do path: `AND cliente_id = ?`
-- [ ] M-6 Resposta sem stream acima de 16 MiB é truncada e volta 200: ler `max+1` e devolver 502
+- [x] M-6 Resposta sem stream acima de 16 MiB é truncada e volta 200: ler `max+1` e devolver 502 (resolvido 10/10)
 - [ ] M-7 Painel shadow compara tamanho SSE × JSON: medir tamanho do conteúdo
 - [x] M-8 (resolvido 09/10: sessão aleatória revogável, limite de login, Secure atrás de proxy, compose sem token padrão) Cookie admin não revogável no servidor, `Secure` atrás do TLS do Cloud Run, sem limite de tentativas, token padrão no compose
 - [ ] M-9 Teste de desconexão não confere o status 499 explicitamente
 - [ ] M-10 Sessão expirada não volta para o login no painel (invalidar `sessao` num 401)
+
+## Achados menores da revisão de 10/10 — adiados
+- [ ] Resposta acima de 16 MiB vira 502 com custo 0, mas o provedor cobrou: estimar como no stream cortado
+- [ ] reasoning_content retido no restaurador (termina em `[`) sai depois do content: finalizar o raciocínio no primeiro chunk de content
+- [ ] Teste do limite de login paralelo deveria exigir exatamente 5, não só no máximo 5
+- [ ] `ipDe` assume Cloud Run sem HTTPS Load Balancer na frente (com LB, a última entrada do XFF é o LB)
+- [ ] recarregar_test ignora erros de CriarCliente/CriarChave; falso negativo sem o mutex depende de 200 ms
