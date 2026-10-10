@@ -8,7 +8,7 @@ Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 - [x] 03 Retry com backoff, jitter e Retry-After
 - [x] 04 Roteador: semáforo, circuit breaker, fallback
 - [x] 05 Cache LRU com TTL
-- [ ] 06 LGPD: mascaramento + restauração (inclusive em stream)
+- [x] 06 LGPD: mascaramento + restauração (inclusive em stream)
 - [ ] 07 Armazenamento: clientes, chaves por hash, uso em lote
 - [ ] 08 API HTTP: chat (com e sem stream), auth, rate limit, orçamento, cache + singleflight, shadow, admin, métricas
 - [ ] 09 Binário + Docker + compose
