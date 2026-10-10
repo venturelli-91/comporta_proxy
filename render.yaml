@@ -1,0 +1,18 @@
+# Demo pública na Render (plano free: 0,1 CPU, 512 MB, dorme após 15 min sem tráfego).
+# NUNCA configure DEEPSEEK_API_KEY aqui: sem ela o binário usa o provedor falso, e a demo
+# tem token de admin e chave públicos. Com a chave real, qualquer visitante gastaria dinheiro.
+services:
+  - type: web
+    name: comporta
+    runtime: docker
+    plan: free
+    region: virginia # a mais perto do Brasil entre as da Render
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: TRUST_PROXY # atrás do proxy da Render: o IP real vem no X-Forwarded-For
+        value: "1"
+      - key: ADMIN_TOKEN # token de login da demo, publicado no README
+        sync: false
+      - key: DEMO_CHAVE # chave ck_ do cliente demo, publicada no README
+        sync: false

@@ -113,7 +113,7 @@ k6 run carga/carga.js                 # contra o provedor falso
 docker compose up
 ```
 
-Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_PATH`, `TRUST_PROXY` (=1 atrás de proxy confiável; no Cloud Run o `K_SERVICE` já basta).
+Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_PATH`, `TRUST_PROXY` (=1 atrás de proxy confiável; no Cloud Run o `K_SERVICE` já basta), `DEMO_CHAVE` (só na demo pública: cria o cliente demo com essa chave quando o banco está vazio).
 
 ## Regras de segurança (não negociáveis)
 
@@ -211,6 +211,7 @@ Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_
 - **Cookie do admin é uma sessão aleatória** (o servidor guarda só o hash, logout revoga), `HttpOnly; SameSite=Strict`; token comparado em tempo constante.
 - **Login limitado por IP, consumido na entrada:** `Allow()` confere e gasta num passo só (sem corrida entre tentativas paralelas).
 - **XFF só atrás de proxy confiável** (`K_SERVICE`/`TRUST_PROXY=1`): sem proxy o cabeçalho é do cliente e daria um balde novo a cada tentativa.
+- **Demo pública na Render, não no Cloud Run:** plano gratuito sem cartão; o Cloud Run exige billing. Demo usa só o provedor falso, com token e chave públicos (instância descartável, disco efêmero recriado pelo `DEMO_CHAVE`).
 - **Commits em português (Conventional Commits)** neste repositório, prevalecendo sobre a regra global.
 
 ## Pitch de 30 segundos para a entrevista

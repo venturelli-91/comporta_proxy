@@ -36,3 +36,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 10/10 | M-6 | `fix(httpapi)` | lerResposta lê max+1: acima de 16 MiB vira 502 e não entra no cache |
 | 10/10 | M-4 | `fix(httpapi)` | um restaurador LGPD por campo do delta (content e reasoning_content) |
 | 10/10 | M-3 | `fix(httpapi)` | Encerrar(ctx) cancela shadows presos no prazo; shutdown em 8 s (Cloud Run mata em 10 s) |
+| 10/10 | Demo pública | `feat` | Render free (sem cartão) via render.yaml; DEMO_CHAVE recria o cliente demo a cada disco zerado; nunca DEEPSEEK_API_KEY lá |

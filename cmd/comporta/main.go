@@ -69,6 +69,16 @@ func rodar(log *slog.Logger) error {
 	}
 	defer banco.Fechar()
 	gravador := armazenamento.NovoGravador(banco, 10_000)
+	// Demo pública (Render): o disco zera a cada reinício, então o cliente demo é recriado na subida.
+	if chave := os.Getenv("DEMO_CHAVE"); chave != "" {
+		criou, err := banco.SemearDemo(context.Background(), chave)
+		if err != nil {
+			return fmt.Errorf("seed da demo: %w", err)
+		}
+		if criou {
+			log.Info("cliente demo criado")
+		}
+	}
 
 	adminToken := os.Getenv("ADMIN_TOKEN")
 	if adminToken == "" {

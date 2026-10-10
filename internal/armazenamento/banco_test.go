@@ -201,3 +201,25 @@ func TestIDNuncaReaproveitado(t *testing.T) {
 		t.Fatalf("chave nova reaproveitou o ID %d", kNova.ID)
 	}
 }
+
+// A demo pública sobe com banco vazio (disco efêmero): o seed cria o cliente demo com a
+// chave publicada no README. Com clientes já cadastrados, não mexe em nada.
+func TestSemearDemo(t *testing.T) {
+	b := abrir(t)
+	const chave = "ck_demo_publica"
+	criou, err := b.SemearDemo(ctx, chave)
+	if err != nil || !criou {
+		t.Fatalf("primeiro seed: criou=%v err=%v", criou, err)
+	}
+	ativas, _ := b.ChavesAtivas(ctx)
+	clientes, _ := b.ListarClientes(ctx)
+	if len(clientes) != 1 || !clientes[0].LGPD || ativas[HashChave(chave)] != clientes[0].ID {
+		t.Fatalf("clientes=%+v ativas=%v", clientes, ativas)
+	}
+	if criou, err := b.SemearDemo(ctx, chave); err != nil || criou {
+		t.Fatalf("segundo seed não pode criar de novo: criou=%v err=%v", criou, err)
+	}
+	if _, err := b.SemearDemo(ctx, "sem_prefixo"); err == nil {
+		t.Fatal("chave sem ck_ seria recusada pela autenticação: o seed tem de recusar também")
+	}
+}

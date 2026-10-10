@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -153,7 +154,29 @@ func HashChave(texto string) string {
 
 // CriarChave devolve o texto inteiro da chave uma única vez; depois disso só existe o hash.
 func (b *Banco) CriarChave(ctx context.Context, clienteID int64) (string, Chave, error) {
-	texto := "ck_" + rand.Text()
+	return b.registrarChave(ctx, clienteID, "ck_"+rand.Text())
+}
+
+// SemearDemo cria o cliente "demo" com a chave dada (a publicada no README da demo) quando o
+// banco não tem nenhum cliente, que é o estado da demo a cada vez que o disco efêmero zera.
+// Devolve se criou. A chave pública só é aceitável porque a demo usa o provedor falso.
+func (b *Banco) SemearDemo(ctx context.Context, chave string) (bool, error) {
+	if !strings.HasPrefix(chave, "ck_") {
+		return false, fmt.Errorf("chave da demo precisa começar com ck_")
+	}
+	var n int
+	if err := b.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM clientes`).Scan(&n); err != nil || n > 0 {
+		return false, err
+	}
+	c, err := b.CriarCliente(ctx, Cliente{Nome: "demo", RPM: 30, OrcamentoMicro: 1_000_000, LGPD: true})
+	if err != nil {
+		return false, err
+	}
+	_, _, err = b.registrarChave(ctx, c.ID, chave)
+	return err == nil, err
+}
+
+func (b *Banco) registrarChave(ctx context.Context, clienteID int64, texto string) (string, Chave, error) {
 	agora := time.Now()
 	k := Chave{ClienteID: clienteID, Prefixo: texto[:7] + "…", CriadaEm: agora}
 	res, err := b.db.ExecContext(ctx, `INSERT INTO chaves (cliente_id, prefixo, hash, criada_em) VALUES (?, ?, ?, ?)`,
