@@ -55,12 +55,17 @@ func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 
 // limiteLogin: 5 tentativas por IP, uma nova a cada 12 s. Por IP para que um
 // atacante não tranque o admin de verdade do lado de fora.
-// ponytail: mapa zerado ao passar de 10 mil IPs; LRU se isso virar alvo.
+// ponytail: a poda varre o mapa e só tira os cheios; com 10 mil IPs gastos ao mesmo tempo o
+// mapa cresce e cada login fica O(n). LRU com teto se isso virar alvo.
 func (s *Servidor) limiteLogin(ip string) *rate.Limiter {
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	if len(s.tentativas) > 10_000 {
-		s.tentativas = map[string]*rate.Limiter{}
+		for k, l := range s.tentativas {
+			if l.Tokens() >= float64(l.Burst()) { // cheio = igual a um novo, não guarda nada
+				delete(s.tentativas, k)
+			}
+		}
 	}
 	l, ok := s.tentativas[ip]
 	if !ok {
