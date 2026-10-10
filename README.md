@@ -41,6 +41,7 @@ cp .env.example .env                 # defina ADMIN_TOKEN (o compose não sobe s
 docker compose up --build            # http://localhost:8080, login com o ADMIN_TOKEN
 # ou
 go run ./cmd/comporta                 # sem DEEPSEEK_API_KEY usa o provedor falso; imprime um ADMIN_TOKEN se não houver
+# atrás de outro proxy confiável (fora do Cloud Run): TRUST_PROXY=1 para o limite de login usar o X-Forwarded-For
 ```
 
 Depois, no painel, cadastre um cliente, gere uma chave e use o Playground. Ou use qualquer SDK da OpenAI trocando só a base URL:

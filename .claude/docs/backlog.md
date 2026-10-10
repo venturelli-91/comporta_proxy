@@ -2,13 +2,14 @@
 
 Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 
-## Próxima sessão — começar por aqui (P0)
-Alertas de segurança sobre o limite de login (`internal/httpapi/admin.go`, `login` / `limiteLogin` / `ipDe`), ainda **não corrigidos**:
-- [ ] **Corrida (TOCTOU):** `lim.Tokens()` é checado e o `Allow()` só roda depois da comparação; tentativas paralelas passam todas pela checagem. Correção: consumir na entrada (`if !lim.Allow() { 429 }`), aceitando que o login certo também consome (o limite já é por IP, então não tranca o admin). Ajustar `TestLoginLimitaTentativasSemTrancarOAdmin` (tirar o laço "login certo não consome") e escrever um teste com N tentativas paralelas.
-- [ ] **`X-Forwarded-For` forjável:** sem proxy na frente, quem ataca troca o cabeçalho e ganha um balde novo a cada tentativa. Correção: só usar o XFF quando houver proxy confiável (`K_SERVICE` definido pelo Cloud Run ou `TRUST_PROXY=1`, via `Deps`); senão, `RemoteAddr`. Teste: sem confiança, trocar o XFF não contorna o limite.
-- [ ] **Reset do mapa:** acima de 10 mil IPs o mapa inteiro é zerado, e quem ataca pode forçar o reset. Correção: podar só os limitadores cheios (`Tokens() >= burst`, que não guardam informação).
+## Segurança do login (P0) — resolvido em 10/10, branch `fix/login-seguranca`
+- [x] Corrida (TOCTOU): `Allow()` na entrada; teste com 20 tentativas paralelas
+- [x] `X-Forwarded-For` só com proxy confiável (`K_SERVICE` ou `TRUST_PROXY=1`)
+- [x] Poda do mapa de tentativas tira só limitadores cheios
+- [x] M-5 revogar chave exige o cliente dono
+- [x] Cortes de stdlib da auditoria ponytail (`cmp.Or`, `slices.SortFunc`, sem struct `limitador`)
 
-Depois disso: rodar `go test -race ./...` no Docker, fazer push no `feat/mvp` (PR #1) e atualizar a descrição do PR.
+Próximo: PR do `fix/login-seguranca` para `main` (o PR #1 já foi mergeado).
 
 ## MVP — até 13/10 (P0)
 - [x] 01 Config em JSON e custo com horário de pico
@@ -26,7 +27,6 @@ Depois disso: rodar `go test -race ./...` no Docker, fazer push no `feat/mvp` (P
 
 ## Depois da entrevista (P1/P2)
 - [ ] Rate limit por tokens estimados com reconciliação pelo `usage`
-- [ ] Limite de concorrência por cliente
 - [ ] Relatório comparativo de shadow mais rico (diferença de conteúdo, não só tamanho)
 - [ ] Métricas com o client oficial do Prometheus + OpenTelemetry
 - [ ] Postgres + Redis (cache e rate limit compartilhados entre instâncias)
@@ -41,6 +41,10 @@ Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pag
 | Onde | Atalho | Pagar quando |
 |---|---|---|
 | `internal/httpapi/servidor.go` | Orçamento (gasto do mês) em memória | Mais de uma instância → Redis |
+| `internal/httpapi/admin.go` | Poda do mapa de tentativas é O(n) e só tira os cheios | Ataque com >10 mil IPs reais gastos ao mesmo tempo → LRU com teto |
+| `internal/httpapi/auth.go` | Limite de 32 requisições simultâneas igual para todos | Algum cliente precisar de mais → coluna no cliente |
+| `internal/httpapi/auth.go` | Sessões do admin em memória | Mais de uma instância → Redis |
+| `internal/httpapi/chat.go` | Uso estimado (stream cortado) sem marca no evento | Painel precisar distinguir → coluna nova |
 | `internal/httpapi/chat.go` | Seguidores do singleflight recebem replay, não stream ao vivo | TTFT de requisições cacheáveis importar → fanout |
 | `internal/httpapi/relay.go` | Um restaurador LGPD para todas as choices | Cliente usar `n > 1` |
 | `internal/httpapi/relay.go` | Content multimodal (partes) não é mascarado | Cliente mandar imagem ou partes |
@@ -55,7 +59,7 @@ Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pag
 - [ ] M-2 Lote de uso que falha ao gravar some sem log: logar e somar em `descartados`
 - [ ] M-3 Shutdown espera shadows sem limite: contexto do servidor cancelado no SIGTERM + prazo de ~8 s
 - [ ] M-4 Stream restaura só `delta.content`; `reasoning_content` da DeepSeek fica mascarado
-- [ ] M-5 Revogar chave ignora o cliente do path: `AND cliente_id = ?`
+- [x] M-5 (resolvido 10/10) Revogar chave ignora o cliente do path: `AND cliente_id = ?`
 - [ ] M-6 Resposta sem stream acima de 16 MiB é truncada e volta 200: ler `max+1` e devolver 502
 - [ ] M-7 Painel shadow compara tamanho SSE × JSON: medir tamanho do conteúdo
 - [x] M-8 (resolvido 09/10: sessão aleatória revogável, limite de login, Secure atrás de proxy, compose sem token padrão) Cookie admin não revogável no servidor, `Secure` atrás do TLS do Cloud Run, sem limite de tentativas, token padrão no compose
