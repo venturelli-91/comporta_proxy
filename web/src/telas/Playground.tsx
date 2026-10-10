@@ -65,7 +65,13 @@ export default function Playground() {
           "Content-Type": "application/json",
           ...(cache ? { "X-Comporta-Cache": "ligado" } : {}),
         },
-        body: JSON.stringify({ model: modelo, stream, messages: [{ role: "user", content: texto }] }),
+        // include_usage: sem ele o gateway não repassa o chunk de uso no stream (como a OpenAI).
+        body: JSON.stringify({
+          model: modelo,
+          stream,
+          ...(stream ? { stream_options: { include_usage: true } } : {}),
+          messages: [{ role: "user", content: texto }],
+        }),
       });
       setRespondeu(r.ok); // erro (chave inválida, limite) não diz nada sobre o LGPD da chave
       setEnviado(decodificar(r.headers.get("X-Comporta-Enviado")));
@@ -114,7 +120,7 @@ export default function Playground() {
   };
 
   return (
-    <div className="grid items-start gap-8 xl:grid-cols-[22rem_1fr]">
+    <div className="grid items-start gap-6 2xl:grid-cols-[22rem_1fr]">
       <form onSubmit={enviar} className={`${cartao} space-y-4 p-5 text-sm`}>
         <label className="block font-medium">
           Chave do cliente
@@ -193,8 +199,8 @@ export default function Playground() {
 function Painel({ titulo, selo, children }: { titulo: string; selo: ReactNode; children: ReactNode }) {
   return (
     <section className={`${cartao} flex flex-col`}>
-      <header className="flex min-h-12 items-center justify-between gap-2 border-b border-borda px-4 py-2.5">
-        <h2 className="text-sm font-medium">{titulo}</h2>
+      <header className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-borda px-4 py-2.5">
+        <h2 className="whitespace-nowrap text-sm font-medium">{titulo}</h2>
         {selo}
       </header>
       <div className="min-h-36 flex-1 whitespace-pre-wrap px-4 py-3 leading-relaxed">{children}</div>
