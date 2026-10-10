@@ -82,7 +82,7 @@ export default function Visao() {
             {prov.data?.map((p) => (
               <li key={p.destino} className="flex items-center justify-between gap-3">
                 <span className="truncate">{p.destino}</span>
-                <Breaker estado={p.breaker} />
+                <Breaker estado={p.breaker} abertos={p.abertos} />
               </li>
             ))}
           </ul>
@@ -133,8 +133,9 @@ function Numero({ rotulo, valor, alerta }: { rotulo: string; valor: string; aler
   );
 }
 
-function Breaker({ estado }: { estado: string }) {
-  const rotulo = { closed: "Normal", "half-open": "Testando", open: "Fora (breaker aberto)" }[estado] ?? estado;
+function Breaker({ estado, abertos }: { estado: string; abertos: number }) {
+  const base = { closed: "Normal", "half-open": "Testando", open: "Breaker aberto" }[estado] ?? estado;
+  const rotulo = abertos ? `${base} para ${abertos} ${abertos === 1 ? "cliente" : "clientes"}` : base;
   const cor = estado === "closed" ? "text-acento" : estado === "open" ? "text-erro" : "text-alerta";
   return <span className={`shrink-0 ${cor}`}>{rotulo}</span>;
 }

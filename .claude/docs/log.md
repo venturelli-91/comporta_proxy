@@ -26,3 +26,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 09/10 | Segurança: breaker compartilhado | `fix(gateway)` | prazo total do pedido não abre o breaker (só o watchdog conta); 401/402/403 do provedor fazem fallback |
 | 09/10 | Segurança: orçamento fail-open | `fix(gateway)` | config recusa modelo de destino/shadow sem preço; estouro por pedidos em voo limitado a 32 por cliente |
 | 09/10 | Segurança: sessão do admin | `fix(httpapi)` | cookie = sessão aleatória (só hash no servidor), logout revoga, 5 tentativas/min, Secure com X-Forwarded-Proto, compose exige ADMIN_TOKEN |
+| 09/10 | Segurança: breaker por cliente | `fix(gateway)` | breaker isolado por cliente+destino: ninguém derruba o destino dos outros; prazo estourado volta a contar (provedor travado abre o breaker de quem sofre) |

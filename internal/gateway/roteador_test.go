@@ -45,7 +45,7 @@ func novoCenario(t *testing.T, a, b http.Handler, concorrencia int) *Roteador {
 
 func chamar(t *testing.T, r *Roteador) (Destino, error) {
 	t.Helper()
-	resp, d, err := r.Chamar(context.Background(), "rapido", corpoChat())
+	resp, d, err := r.Chamar(context.Background(), 1, "rapido", corpoChat())
 	if err == nil {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
@@ -173,7 +173,7 @@ func TestBreakerContaWatchdog(t *testing.T) {
 	for range 5 {
 		ctx, cancel := context.WithCancelCause(context.Background())
 		relogio := time.AfterFunc(20*time.Millisecond, func() { cancel(errWatchdog) })
-		_, _, _ = r.Chamar(ctx, "rapido", corpoChat())
+		_, _, _ = r.Chamar(ctx, 1, "rapido", corpoChat())
 		relogio.Stop()
 		cancel(nil)
 	}
@@ -182,21 +182,43 @@ func TestBreakerContaWatchdog(t *testing.T) {
 	}
 }
 
-// O prazo total é do pedido (um cliente pode mandar gerações enormes de propósito): estourá-lo
-// não pode derrubar o destino para todos os clientes.
-func TestPrazoTotalNaoAbreBreaker(t *testing.T) {
-	trava := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body)
-		<-r.Context().Done()
-	})
-	r := novoCenario(t, trava, &provedor.Falso{}, 10)
-	for range 6 {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-		_, _, _ = r.Chamar(ctx, "rapido", corpoChat())
-		cancel()
+// contaETrava conta as chamadas recebidas e nunca responde.
+type contaETrava struct{ n atomic.Int64 }
+
+func (c *contaETrava) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c.n.Add(1)
+	_, _ = io.Copy(io.Discard, r.Body) // sem ler o corpo o servidor não percebe a desconexão
+	<-r.Context().Done()
+}
+
+func chamarComPrazo(r *Roteador, cliente int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if resp, _, err := r.Chamar(ctx, cliente, "rapido", corpoChat()); err == nil {
+		resp.Body.Close()
 	}
-	if e := r.Estado(); e[0].Breaker != "closed" {
-		t.Fatalf("breaker = %+v: prazo do pedido abriu o breaker compartilhado", e)
+}
+
+// O breaker é por cliente e destino: um provedor travado abre o breaker de quem sofreu os
+// timeouts (prazo estourado conta como falha), mas um cliente não consegue derrubar o
+// destino para os outros mandando pedidos que estouram o prazo de propósito.
+func TestBreakerIsoladoPorCliente(t *testing.T) {
+	a := &contaETrava{}
+	r := novoCenario(t, a, &provedor.Falso{}, 10)
+	for range 5 {
+		chamarComPrazo(r, 1)
+	}
+	antes := a.n.Load()
+	chamarComPrazo(r, 1)
+	if a.n.Load() != antes {
+		t.Fatal("cliente 1: com o breaker dele aberto, o destino travado devia ser pulado")
+	}
+	chamarComPrazo(r, 2)
+	if a.n.Load() != antes+1 {
+		t.Fatal("cliente 2 não devia herdar o breaker aberto pelo cliente 1")
+	}
+	if e := r.Estado(); e[0].Destino != "a/modelo-a" || e[0].Breaker != "open" || e[0].Abertos != 1 {
+		t.Fatalf("estado = %+v", e)
 	}
 }
 

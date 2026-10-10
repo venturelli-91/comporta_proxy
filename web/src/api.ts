@@ -38,7 +38,8 @@ export type Cliente = {
 };
 export type Chave = { id: number; cliente_id: number; prefixo: string; criada_em: string; revogada_em: string | null };
 export type Modelo = { alias: string; destinos: string[]; shadow?: string };
-export type EstadoDestino = { destino: string; breaker: string };
+// O breaker é por cliente: "breaker" é o pior estado entre eles, "abertos" quantos não estão fechados.
+export type EstadoDestino = { destino: string; breaker: string; abertos: number };
 
 export class ErroApi extends Error {
   constructor(

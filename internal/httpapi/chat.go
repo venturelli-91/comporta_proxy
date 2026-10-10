@@ -130,7 +130,7 @@ func (s *Servidor) direto(w http.ResponseWriter, r *http.Request, p *pedido) {
 		ctx, fim = context.WithTimeout(ctx, s.total)
 		defer fim()
 	}
-	resp, dest, err := s.d.Roteador.Chamar(ctx, p.alias, p.corpo)
+	resp, dest, err := s.d.Roteador.Chamar(ctx, p.cli.ID, p.alias, p.corpo)
 	if err != nil {
 		s.erroProvedor(w, p, causa(ctx, err))
 		return
@@ -197,7 +197,7 @@ func (s *Servidor) comCache(w http.ResponseWriter, r *http.Request, p *pedido) {
 			v = s.novaVigia(cancel) // o mesmo watchdog do caminho direto
 			defer v.parar()
 		}
-		resp, dest, err := s.d.Roteador.Chamar(ctx, p.alias, p.corpo)
+		resp, dest, err := s.d.Roteador.Chamar(ctx, p.cli.ID, p.alias, p.corpo)
 		if err != nil {
 			return nil, causa(ctx, err)
 		}
@@ -277,7 +277,7 @@ func (s *Servidor) sombra(ctx context.Context, p *pedido, d gateway.Destino) {
 		defer func() { <-s.sombras }()
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.total)
 		defer cancel()
-		resp, err := s.d.Roteador.ChamarDestino(ctx, d, corpo)
+		resp, err := s.d.Roteador.ChamarDestino(ctx, p.cli.ID, d, corpo)
 		if err != nil {
 			ev.Status = statusDe(err)
 		} else {

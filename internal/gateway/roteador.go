@@ -26,11 +26,19 @@ var (
 
 // Roteador leva um alias ("rapido") até um provedor de verdade, protegendo cada destino com
 // circuit breaker e retry, e o alias inteiro com um semáforo abaixo do limite da conta.
+//
+// O breaker é por cliente e destino. Compartilhado, qualquer falha que um cliente conseguisse
+// provocar (gerações que estouram o prazo, pedidos que fazem o provedor travar) abriria o
+// destino para todos. Isolado, cada cliente só derruba o próprio caminho, e o breaker pode
+// contar timeouts sem medo. O custo: com o provedor doente de verdade, cada cliente precisa
+// das próprias falhas para o breaker dele abrir.
 type Roteador struct {
 	cfg      *Config
 	clientes map[string]*provedor.Cliente
-	breakers map[string]*gobreaker.CircuitBreaker[*http.Response] // por destino "provedor/modelo"
-	semaforo map[string]chan struct{}                             // por alias
+	semaforo map[string]chan struct{} // por alias
+
+	brMu     sync.Mutex
+	breakers map[chaveBreaker]*gobreaker.CircuitBreaker[*http.Response]
 
 	baseRetry      time.Duration
 	esperaSemaforo time.Duration
@@ -39,20 +47,33 @@ type Roteador struct {
 func NovoRoteador(cfg *Config, clientes map[string]*provedor.Cliente) *Roteador {
 	r := &Roteador{
 		cfg: cfg, clientes: clientes,
-		breakers:       map[string]*gobreaker.CircuitBreaker[*http.Response]{},
+		breakers:       map[chaveBreaker]*gobreaker.CircuitBreaker[*http.Response]{},
 		semaforo:       map[string]chan struct{}{},
 		baseRetry:      200 * time.Millisecond,
 		esperaSemaforo: 2 * time.Second,
 	}
 	for alias, m := range cfg.Modelos {
 		r.semaforo[alias] = make(chan struct{}, max(m.Concorrencia, 1))
-		for _, d := range m.todos() {
-			if _, ok := r.breakers[d.String()]; !ok {
-				r.breakers[d.String()] = novoBreaker(d.String())
-			}
-		}
 	}
 	return r
+}
+
+type chaveBreaker struct {
+	cliente int64
+	destino string
+}
+
+// breaker devolve (criando na primeira vez) o breaker do cliente para o destino.
+func (r *Roteador) breaker(cliente int64, d Destino) *gobreaker.CircuitBreaker[*http.Response] {
+	k := chaveBreaker{cliente, d.String()}
+	r.brMu.Lock()
+	defer r.brMu.Unlock()
+	b, ok := r.breakers[k]
+	if !ok {
+		b = novoBreaker(d.String())
+		r.breakers[k] = b
+	}
+	return b
 }
 
 func novoBreaker(nome string) *gobreaker.CircuitBreaker[*http.Response] {
@@ -68,13 +89,9 @@ func novoBreaker(nome string) *gobreaker.CircuitBreaker[*http.Response] {
 		},
 		// Pedido malformado (400, 413, 422) não indica provedor doente.
 		IsSuccessful: func(err error) bool { return err == nil || erroDoPedido(err) },
-		// O breaker é compartilhado por todos os clientes, então só conta o que é culpa do
-		// provedor. Fica de fora o cliente que desistiu e o prazo total do pedido: um cliente
-		// mandando gerações enormes de propósito não pode derrubar o destino para os outros.
-		// O corte do watchdog (cancelamento com causa própria: provedor sem resposta) conta.
-		IsExcluded: func(err error) bool {
-			return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-		},
+		// Cliente que desistiu não diz nada sobre a saúde do provedor. Prazo estourado e corte
+		// do watchdog contam: como o breaker é do próprio cliente, ele só derruba o próprio caminho.
+		IsExcluded: func(err error) bool { return errors.Is(err, context.Canceled) },
 	})
 }
 
@@ -88,7 +105,7 @@ func erroDoPedido(err error) bool {
 
 // Chamar tenta os destinos do alias em ordem. Devolve a resposta 2xx aberta: quem chama lê o
 // corpo (stream ou não) e fecha; fechar o corpo também libera o semáforo.
-func (r *Roteador) Chamar(ctx context.Context, alias string, corpo map[string]json.RawMessage) (*http.Response, Destino, error) {
+func (r *Roteador) Chamar(ctx context.Context, cliente int64, alias string, corpo map[string]json.RawMessage) (*http.Response, Destino, error) {
 	m, ok := r.cfg.Modelos[alias]
 	if !ok {
 		return nil, Destino{}, fmt.Errorf("alias %q: %w", alias, ErrSemDestino)
@@ -107,7 +124,7 @@ func (r *Roteador) Chamar(ctx context.Context, alias string, corpo map[string]js
 
 	var ultimo error
 	for _, d := range m.Destinos {
-		resp, err := r.ChamarDestino(ctx, d, corpo)
+		resp, err := r.ChamarDestino(ctx, cliente, d, corpo)
 		if err == nil {
 			resp.Body = &corpoComFim{ReadCloser: resp.Body, fim: liberar}
 			return resp, d, nil
@@ -127,18 +144,18 @@ func (r *Roteador) Chamar(ctx context.Context, alias string, corpo map[string]js
 
 // ChamarDestino chama um destino específico (usado também pelo modo shadow), com o retry
 // dentro do breaker: o breaker conta só o resultado final de cada chamada.
-func (r *Roteador) ChamarDestino(ctx context.Context, d Destino, corpo map[string]json.RawMessage) (*http.Response, error) {
+func (r *Roteador) ChamarDestino(ctx context.Context, cliente int64, d Destino, corpo map[string]json.RawMessage) (*http.Response, error) {
 	c := maps.Clone(corpo)
 	c["model"], _ = json.Marshal(d.Modelo)
 	b, err := json.Marshal(c)
 	if err != nil {
 		return nil, fmt.Errorf("codificando corpo: %w", err)
 	}
-	cliente := r.clientes[d.Provedor]
-	return r.breakers[d.String()].Execute(func() (*http.Response, error) {
+	prov := r.clientes[d.Provedor]
+	return r.breaker(cliente, d).Execute(func() (*http.Response, error) {
 		var resp *http.Response
 		err := resiliencia.Retry(ctx, 3, r.baseRetry, func() (err error) {
-			resp, err = cliente.Enviar(ctx, b)
+			resp, err = prov.Enviar(ctx, b)
 			return err
 		})
 		return resp, err
@@ -147,15 +164,33 @@ func (r *Roteador) ChamarDestino(ctx context.Context, d Destino, corpo map[strin
 
 type EstadoDestino struct {
 	Destino string `json:"destino"`
-	Breaker string `json:"breaker"`
+	Breaker string `json:"breaker"` // pior estado entre os clientes
+	Abertos int    `json:"abertos"` // clientes com o breaker não fechado
 }
 
-// Estado lista os breakers em ordem alfabética, para o painel.
+// Estado resume os breakers por destino, em ordem alfabética, para o painel.
 // ponytail: sem ocupação do semáforo; entra junto com as métricas Prometheus.
 func (r *Roteador) Estado() []EstadoDestino {
-	out := make([]EstadoDestino, 0, len(r.breakers))
-	for nome, b := range r.breakers {
-		out = append(out, EstadoDestino{nome, b.State().String()})
+	por := map[string]*EstadoDestino{}
+	for _, m := range r.cfg.Modelos {
+		for _, d := range m.todos() {
+			por[d.String()] = &EstadoDestino{Destino: d.String(), Breaker: gobreaker.StateClosed.String()}
+		}
+	}
+	r.brMu.Lock()
+	for k, b := range r.breakers {
+		e := por[k.destino]
+		if st := b.State(); st != gobreaker.StateClosed {
+			e.Abertos++
+			if st == gobreaker.StateOpen || e.Breaker == gobreaker.StateClosed.String() {
+				e.Breaker = st.String()
+			}
+		}
+	}
+	r.brMu.Unlock()
+	out := make([]EstadoDestino, 0, len(por))
+	for _, e := range por {
+		out = append(out, *e)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Destino < out[j].Destino })
 	return out
