@@ -41,6 +41,7 @@ Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pag
 | Onde | Atalho | Pagar quando |
 |---|---|---|
 | `internal/httpapi/servidor.go` | Orçamento (gasto do mês) em memória | Mais de uma instância → Redis |
+| `internal/httpapi/admin.go` | `ipDe` confia na última entrada do XFF (um proxy só) | HTTPS Load Balancer na frente → contar N proxies confiáveis |
 | `internal/httpapi/admin.go` | Poda do mapa de tentativas é O(n) e só tira os cheios | Ataque com >10 mil IPs reais gastos ao mesmo tempo → LRU com teto |
 | `internal/httpapi/auth.go` | Limite de 32 requisições simultâneas igual para todos | Algum cliente precisar de mais → coluna no cliente |
 | `internal/httpapi/auth.go` | Sessões do admin em memória | Mais de uma instância → Redis |
@@ -67,8 +68,8 @@ Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pag
 - [ ] M-10 Sessão expirada não volta para o login no painel (invalidar `sessao` num 401)
 
 ## Achados menores da revisão de 10/10 — adiados
-- [ ] Resposta acima de 16 MiB vira 502 com custo 0, mas o provedor cobrou: estimar como no stream cortado
-- [ ] reasoning_content retido no restaurador (termina em `[`) sai depois do content: finalizar o raciocínio no primeiro chunk de content
-- [ ] Teste do limite de login paralelo deveria exigir exatamente 5, não só no máximo 5
-- [ ] `ipDe` assume Cloud Run sem HTTPS Load Balancer na frente (com LB, a última entrada do XFF é o LB)
-- [ ] recarregar_test ignora erros de CriarCliente/CriarChave; falso negativo sem o mutex depende de 200 ms
+- [x] Resposta acima de 16 MiB vira 502 com custo 0, mas o provedor cobrou: estimar como no stream cortado (resolvido 10/10)
+- [x] reasoning_content retido no restaurador (termina em `[`) sai depois do content: finalizar o raciocínio no primeiro chunk de content (resolvido 10/10)
+- [x] Teste do limite de login paralelo deveria exigir exatamente 5, não só no máximo 5 (resolvido 10/10)
+- [x] `ipDe` assume Cloud Run sem HTTPS Load Balancer na frente (com LB, a última entrada do XFF é o LB) (documentado como `ponytail:` no código)
+- [x] recarregar_test ignora erros de CriarCliente/CriarChave; falso negativo sem o mutex depende de 200 ms (erros checados 10/10; a espera de 200 ms fica)

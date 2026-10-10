@@ -78,6 +78,8 @@ func (s *Servidor) limiteLogin(ip string) *rate.Limiter {
 // ipDe usa a última entrada do X-Forwarded-For, a que o proxy confiável (o front-end do Cloud
 // Run) acrescenta; o cliente só forja as anteriores. Sem esse proxy o cabeçalho inteiro é do
 // cliente, que ganharia um balde novo a cada tentativa: aí vale o endereço da conexão.
+// ponytail: assume um proxy só (Cloud Run direto, Render). Com um HTTPS Load Balancer na frente, a
+// última entrada seria o IP do LB e todos cairiam no mesmo balde: contar N proxies confiáveis do fim.
 func (s *Servidor) ipDe(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); s.d.ConfiarProxy && xff != "" {
 		return strings.TrimSpace(xff[strings.LastIndex(xff, ",")+1:])
