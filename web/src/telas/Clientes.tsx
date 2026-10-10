@@ -110,7 +110,7 @@ function NovoCliente() {
           </div>
         </fieldset>
         {criar.isError && <p role="alert" className="text-erro">{criar.error.message}</p>}
-        <button disabled={criar.isPending} className="rounded-md bg-acento px-3 py-2 font-medium text-white disabled:opacity-60 dark:text-fundo">
+        <button disabled={criar.isPending} className="rounded-md bg-acento px-3 py-2 font-medium text-sobre-acento disabled:opacity-60 ">
           Cadastrar cliente
         </button>
       </form>

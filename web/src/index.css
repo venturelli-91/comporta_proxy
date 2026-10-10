@@ -1,48 +1,111 @@
 @import "tailwindcss";
 
-/* Tokens de .claude/docs/design/painel.md. Água: teal sobre cinza-esverdeado frio. */
+/* Tokens de .claude/docs/design/painel.md. Água: teal sobre cinza-esverdeado frio.
+   Tema: segue o sistema por padrão; data-tema="claro"|"escuro" no <html> (escolha do usuário) vence. */
 :root {
   --fundo: #f3f5f4;
+  --lateral: #e9eeec; /* segunda camada neutra: navegação */
   --superficie: #ffffff;
+  --realce: #f7f9f8; /* hover de linhas e itens */
   --texto: #14201d;
-  --suave: #5b6b66;
-  --borda: #dfe5e2;
+  --suave: #56655f;
+  --borda: #dbe2df;
   --acento: #0f766e;
   --acento-claro: #99d5cc;
-  --alerta: #b45309;
+  --sobre-acento: #ffffff; /* texto em cima do botão teal */
+  --alerta: #a14a07;
   --erro: #b91c1c;
+  --sombra: 0 1px 2px rgb(20 32 29 / 0.06), 0 1px 1px rgb(20 32 29 / 0.04);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-tema="claro"]) {
     --fundo: #0f1513;
+    --lateral: #0b100f;
     --superficie: #17201d;
+    --realce: #1c2723;
     --texto: #e4ebe8;
-    --suave: #93a39e;
+    --suave: #9aaba5;
     --borda: #26332f;
     --acento: #2dd4bf;
     --acento-claro: #1d5c55;
+    --sobre-acento: #0f1513;
     --alerta: #f59e0b;
     --erro: #f87171;
+    --sombra: 0 1px 2px rgb(0 0 0 / 0.4);
     color-scheme: dark;
   }
 }
 
+:root[data-tema="escuro"] {
+  --fundo: #0f1513;
+  --lateral: #0b100f;
+  --superficie: #17201d;
+  --realce: #1c2723;
+  --texto: #e4ebe8;
+  --suave: #9aaba5;
+  --borda: #26332f;
+  --acento: #2dd4bf;
+  --acento-claro: #1d5c55;
+  --sobre-acento: #0f1513;
+  --alerta: #f59e0b;
+  --erro: #f87171;
+  --sombra: 0 1px 2px rgb(0 0 0 / 0.4);
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-fundo: var(--fundo);
+  --color-lateral: var(--lateral);
   --color-superficie: var(--superficie);
+  --color-realce: var(--realce);
   --color-texto: var(--texto);
   --color-suave: var(--suave);
   --color-borda: var(--borda);
   --color-acento: var(--acento);
   --color-acento-claro: var(--acento-claro);
+  --color-sobre-acento: var(--sobre-acento);
   --color-alerta: var(--alerta);
   --color-erro: var(--erro);
+  --shadow-cartao: var(--sombra);
+  --animate-pulso: pulso 1.4s ease-in-out infinite;
+}
+
+@keyframes pulso {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* O Tailwind v4 tira o ponteiro dos botões; aqui volta para tudo que é clicável. */
+button,
+select,
+summary,
+[role="button"],
+input[type="checkbox"],
+label:has(> input[type="checkbox"]) {
+  cursor: pointer;
+}
+:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 input[type="checkbox"] {
   accent-color: var(--acento);
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  transition:
+    color 150ms ease-out,
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out;
 }
 
 body {
@@ -50,6 +113,17 @@ body {
   color: var(--texto);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+::placeholder {
+  color: var(--suave);
 }
 
 :focus-visible {
