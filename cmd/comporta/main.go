@@ -2,6 +2,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -31,13 +32,6 @@ func main() {
 	}
 }
 
-func env(nome, padrao string) string {
-	if v := os.Getenv(nome); v != "" {
-		return v
-	}
-	return padrao
-}
-
 func envNum(nome string, padrao float64) float64 {
 	v, err := strconv.ParseFloat(os.Getenv(nome), 64)
 	if err != nil {
@@ -47,7 +41,7 @@ func envNum(nome string, padrao float64) float64 {
 }
 
 func rodar(log *slog.Logger) error {
-	cfg, err := gateway.Carregar(env("CONFIG_PATH", "comporta.json"))
+	cfg, err := gateway.Carregar(cmp.Or(os.Getenv("CONFIG_PATH"), "comporta.json"))
 	if err != nil {
 		return err
 	}
@@ -56,7 +50,7 @@ func rodar(log *slog.Logger) error {
 	for nome, p := range cfg.Provedores {
 		chave, base := os.Getenv(p.ChaveEnv), p.BaseURL
 		if nome == "deepseek" {
-			base = env("DEEPSEEK_BASE_URL", base)
+			base = cmp.Or(os.Getenv("DEEPSEEK_BASE_URL"), base)
 		}
 		if chave == "" {
 			// Sem chave real, o provedor vira o falso em loopback: dá para rodar, testar e medir sem gastar.
@@ -69,7 +63,7 @@ func rodar(log *slog.Logger) error {
 		clientes[nome] = provedor.Novo(base, chave, max(p.MaxConexoes, 10), cfg.Timeouts.Conexao())
 	}
 
-	banco, err := armazenamento.Abrir(env("DB_PATH", "comporta.db"))
+	banco, err := armazenamento.Abrir(cmp.Or(os.Getenv("DB_PATH"), "comporta.db"))
 	if err != nil {
 		return err
 	}
@@ -105,7 +99,7 @@ func rodar(log *slog.Logger) error {
 	defer func() { pararUso(); <-usoFim }()
 
 	// Sem WriteTimeout: ele cortaria streams longos. Os prazos ficam no watchdog do relay.
-	h := &http.Server{Addr: ":" + env("PORT", "8080"), Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	h := &http.Server{Addr: ":" + cmp.Or(os.Getenv("PORT"), "8080"), Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	ctx, parar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer parar()
 	erroServidor := make(chan error, 1)

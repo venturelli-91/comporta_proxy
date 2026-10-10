@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,7 +9,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -192,7 +193,7 @@ func (r *Roteador) Estado() []EstadoDestino {
 	for _, e := range por {
 		out = append(out, *e)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Destino < out[j].Destino })
+	slices.SortFunc(out, func(a, b EstadoDestino) int { return cmp.Compare(a.Destino, b.Destino) })
 	return out
 }
 
