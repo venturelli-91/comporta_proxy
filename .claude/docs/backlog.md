@@ -2,6 +2,14 @@
 
 Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 
+## Próxima sessão — começar por aqui (P0)
+Alertas de segurança sobre o limite de login (`internal/httpapi/admin.go`, `login` / `limiteLogin` / `ipDe`), ainda **não corrigidos**:
+- [ ] **Corrida (TOCTOU):** `lim.Tokens()` é checado e o `Allow()` só roda depois da comparação; tentativas paralelas passam todas pela checagem. Correção: consumir na entrada (`if !lim.Allow() { 429 }`), aceitando que o login certo também consome (o limite já é por IP, então não tranca o admin). Ajustar `TestLoginLimitaTentativasSemTrancarOAdmin` (tirar o laço "login certo não consome") e escrever um teste com N tentativas paralelas.
+- [ ] **`X-Forwarded-For` forjável:** sem proxy na frente, quem ataca troca o cabeçalho e ganha um balde novo a cada tentativa. Correção: só usar o XFF quando houver proxy confiável (`K_SERVICE` definido pelo Cloud Run ou `TRUST_PROXY=1`, via `Deps`); senão, `RemoteAddr`. Teste: sem confiança, trocar o XFF não contorna o limite.
+- [ ] **Reset do mapa:** acima de 10 mil IPs o mapa inteiro é zerado, e quem ataca pode forçar o reset. Correção: podar só os limitadores cheios (`Tokens() >= burst`, que não guardam informação).
+
+Depois disso: rodar `go test -race ./...` no Docker, fazer push no `feat/mvp` (PR #1) e atualizar a descrição do PR.
+
 ## MVP — até 13/10 (P0)
 - [x] 01 Config em JSON e custo com horário de pico
 - [x] 02 Provedor: cliente compatível com OpenAI + provedor falso

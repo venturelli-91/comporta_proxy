@@ -28,3 +28,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 09/10 | Segurança: sessão do admin | `fix(httpapi)` | cookie = sessão aleatória (só hash no servidor), logout revoga, 5 tentativas/min, Secure com X-Forwarded-Proto, compose exige ADMIN_TOKEN |
 | 09/10 | Segurança: breaker por cliente | `fix(gateway)` | breaker isolado por cliente+destino: ninguém derruba o destino dos outros; prazo estourado volta a contar (provedor travado abre o breaker de quem sofre) |
 | 09/10 | Segurança: lockout do login | `fix(httpapi)` | limite de login por IP (último X-Forwarded-For) e só tentativa errada consome; atacante não tranca o admin |
+| 09/10 | Sessão encerrada | `docs` | 3 alertas no limite de login (corrida, XFF forjável, reset do mapa) ficaram para a próxima sessão: ver topo do backlog |
