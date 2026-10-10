@@ -93,7 +93,7 @@ func novoCenario(t testing.TB) *cenario {
 	pensador := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		w.Header().Set("Content-Type", "text/event-stream")
-		for _, d := range []string{`{"reasoning_content":"o CPF é [CP"}`, `{"reasoning_content":"F_1] mesmo"}`, `{"content":"ok"}`} {
+		for _, d := range []string{`{"reasoning_content":"o CPF é [CP"}`, `{"reasoning_content":"F_1] mesmo ["}`, `{"content":"ok"}`} {
 			fmt.Fprintf(w, "data: {\"choices\":[{\"index\":0,\"delta\":%s}]}\n\n", d)
 		}
 		fmt.Fprint(w, "data: [DONE]\n\n")
@@ -680,7 +680,8 @@ func TestLoginParaleloRespeitaLimite(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	if n := comparadas.Load(); n > 5 {
+	// Exatamente 5: menos indicaria limite consumindo demais (ou 429 para todos), mais seria a corrida.
+	if n := comparadas.Load(); n != 5 {
 		t.Fatalf("%d tentativas chegaram à comparação; o limite é 5", n)
 	}
 }
@@ -735,6 +736,10 @@ func TestRespostaGrandeVira502(t *testing.T) {
 			if c.s.d.Cache.Bytes() != 0 {
 				t.Fatal("resposta cortada entrou no cache")
 			}
+			// O provedor cobrou a resposta inteira: o orçamento precisa ver um custo, mesmo estimado.
+			if r := c.relatorio(); r.Total.CustoMicro == 0 {
+				t.Fatal("resposta grande registrada com custo zero")
+			}
 		})
 	}
 }
@@ -747,6 +752,7 @@ func TestStreamRestauraRaciocinio(t *testing.T) {
 	resp := c.chat(chave, msg("pensa", "meu CPF é 529.982.247-25", true))
 	defer resp.Body.Close()
 	var raciocinio strings.Builder
+	viuContent := false
 	sc := bufio.NewScanner(resp.Body)
 	for sc.Scan() {
 		dado, ok := strings.CutPrefix(sc.Text(), "data: ")
@@ -757,14 +763,21 @@ func TestStreamRestauraRaciocinio(t *testing.T) {
 			Choices []struct {
 				Delta struct {
 					Reasoning string `json:"reasoning_content"`
+					Content   string
 				}
 			}
 		}
 		if json.Unmarshal([]byte(dado), &v) == nil && len(v.Choices) > 0 {
-			raciocinio.WriteString(v.Choices[0].Delta.Reasoning)
+			d := v.Choices[0].Delta
+			// O raciocínio vem antes da resposta: um pedaço retido não pode sair depois do content.
+			if d.Reasoning != "" && viuContent {
+				t.Fatalf("raciocínio %q chegou depois do content", d.Reasoning)
+			}
+			viuContent = viuContent || d.Content != ""
+			raciocinio.WriteString(d.Reasoning)
 		}
 	}
-	if got := raciocinio.String(); got != "o CPF é 529.982.247-25 mesmo" {
+	if got := raciocinio.String(); got != "o CPF é 529.982.247-25 mesmo [" {
 		t.Fatalf("raciocínio = %q", got)
 	}
 }
