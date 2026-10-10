@@ -54,6 +54,7 @@ type Servidor struct {
 	sf            singleflight.Group
 	met           contadores
 	bg            sync.WaitGroup // shadows em andamento
+	ativos        sync.WaitGroup // requisições em andamento (para o desligamento esperar o registro de uso)
 	// sombras limita os shadows simultâneos: tráfego de comparação não pode disputar o limite
 	// de concorrência da conta com o tráfego real. Sem vaga, o shadow é descartado e contado.
 	sombras chan struct{}
@@ -134,11 +135,13 @@ func (s *Servidor) Recarregar(ctx context.Context) error {
 	return nil
 }
 
-// Encerrar espera os shadows em andamento até o prazo de ctx. Passado o prazo, cancela os que
-// restam e espera eles registrarem o uso (saem logo depois do cancelamento).
+// Encerrar espera as requisições e depois os shadows em andamento até o prazo de ctx. Passado
+// o prazo, cancela os shadows que restam e espera todos registrarem o uso (saem logo depois do
+// cancelamento). As requisições vêm primeiro: só elas disparam shadows, então depois delas
+// nenhum bg.Go corre junto com o bg.Wait. Quem chama corta as conexões antes (h.Close).
 func (s *Servidor) Encerrar(ctx context.Context) {
 	fim := make(chan struct{})
-	go func() { s.bg.Wait(); close(fim) }()
+	go func() { s.ativos.Wait(); s.bg.Wait(); close(fim) }()
 	select {
 	case <-fim:
 	case <-ctx.Done():
@@ -206,6 +209,8 @@ func (s *Servidor) base(h http.Handler) http.Handler {
 			id = rand.Text()[:16]
 		}
 		w.Header().Set("X-Request-Id", id)
+		s.ativos.Add(1)
+		defer s.ativos.Done()
 		reg := &registro{ResponseWriter: w}
 		inicio := time.Now()
 		defer func() {

@@ -117,7 +117,10 @@ func rodar(log *slog.Logger) error {
 	ctxFim, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	if err := h.Shutdown(ctxFim); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		// Prazo estourado com streams abertos: Close cancela o contexto deles, que cobram o uso
+		// (estimado) e registram antes de sair. Sem isso o processo terminaria no meio deles.
 		log.Warn("shutdown", "erro", err.Error())
+		h.Close()
 	}
 	srv.Encerrar(ctxFim)
 	return nil

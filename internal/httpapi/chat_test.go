@@ -789,3 +789,25 @@ func TestEncerrarCortaShadowPreso(t *testing.T) {
 		t.Fatalf("Encerrar levou %v", d)
 	}
 }
+
+// No desligamento, uma requisição cortada (h.Close cancela o contexto dela) ainda precisa
+// registrar o uso antes de Encerrar voltar: depois disso o gravador é drenado e o processo sai.
+func TestEncerrarEsperaRequisicaoCortada(t *testing.T) {
+	c := novoCenario(t)
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+	req, _ := http.NewRequest("POST", c.url+"/v1/chat/completions", strings.NewReader(msg("calado", "oi", true)))
+	req.Header.Set("Authorization", "Bearer "+chave)
+	go func() {
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			resp.Body.Close()
+		}
+	}()
+	time.Sleep(300 * time.Millisecond) // a requisição entra e fica presa no provedor mudo
+	c.http.CloseClientConnections()    // o que o h.Close() faz com as conexões ativas
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // prazo já estourado, como depois de um Shutdown que não terminou
+	c.s.Encerrar(ctx)
+	if n := c.s.met.requisicoes.Load(); n != 1 {
+		t.Fatalf("requisições registradas = %d, queria 1: Encerrar voltou antes do handler registrar o uso", n)
+	}
+}
