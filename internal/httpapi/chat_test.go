@@ -83,7 +83,13 @@ func novoCenario(t testing.TB) *cenario {
 		_, _ = io.Copy(io.Discard, r.Body)
 		<-r.Context().Done()
 	})
-	servidores := map[string]http.Handler{"falso": c.espiao, "ruim": &provedor.Falso{TaxaErro: 1}, "lento": lento, "mudo": mudo}
+	// gigante responde um corpo 1 byte acima do teto de leitura.
+	gigante := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(bytes.Repeat([]byte("a"), maxResposta+1))
+	})
+	servidores := map[string]http.Handler{"gigante": gigante, "falso": c.espiao, "ruim": &provedor.Falso{TaxaErro: 1}, "lento": lento, "mudo": mudo}
 	clientes := map[string]*provedor.Cliente{}
 	provs := map[string]gateway.ProvedorCfg{}
 	for nome, h := range servidores {
@@ -100,6 +106,7 @@ func novoCenario(t testing.TB) *cenario {
 			"migracao": {Destinos: []gateway.Destino{{Provedor: "falso", Modelo: "m1"}}, Shadow: &gateway.Destino{Provedor: "falso", Modelo: "m2"}, Concorrencia: 100},
 			"travado":  {Destinos: []gateway.Destino{{Provedor: "lento", Modelo: "m1"}}, Concorrencia: 100},
 			"calado":   {Destinos: []gateway.Destino{{Provedor: "mudo", Modelo: "m1"}}, Concorrencia: 100},
+			"enorme":   {Destinos: []gateway.Destino{{Provedor: "gigante", Modelo: "m1"}}, Concorrencia: 100},
 		},
 		Precos: map[string]gateway.PrecoCfg{"m1": {EntradaCacheMiss: 100, Saida: 1000}, "m2": {EntradaCacheMiss: 200, Saida: 2000}},
 	}
@@ -698,6 +705,24 @@ func TestIPDe(t *testing.T) {
 			}
 			if got := s.ipDe(r); got != tc.quer {
 				t.Fatalf("ipDe = %q, queria %q", got, tc.quer)
+			}
+		})
+	}
+}
+
+// Resposta acima do teto não pode chegar cortada com 200, nem entrar no cache.
+func TestRespostaGrandeVira502(t *testing.T) {
+	for _, cache := range []string{"desligado", "ligado"} {
+		t.Run("cache "+cache, func(t *testing.T) {
+			c := novoCenario(t)
+			_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja"})
+			resp := c.chat(chave, msg("enorme", "oi", false), "X-Comporta-Cache", cache)
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusBadGateway {
+				t.Fatalf("status %d, queria 502", resp.StatusCode)
+			}
+			if c.s.d.Cache.Bytes() != 0 {
+				t.Fatal("resposta cortada entrou no cache")
 			}
 		})
 	}

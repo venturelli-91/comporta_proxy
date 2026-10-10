@@ -27,6 +27,18 @@ const (
 	maxResposta = 16 << 20 // teto para respostas lidas inteiras (sem stream, cache)
 )
 
+var errRespostaGrande = errors.New("resposta do provedor acima de 16 MiB")
+
+// lerResposta lê a resposta inteira até o teto. Lê 1 byte a mais para distinguir "coube" de
+// "foi cortada": cortada vira erro (502), nunca uma resposta 200 incompleta ou um item de cache.
+func lerResposta(r io.Reader) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, maxResposta+1))
+	if err == nil && len(b) > maxResposta {
+		return nil, errRespostaGrande
+	}
+	return b, err
+}
+
 // pedido é o estado de uma requisição de chat ao longo do caminho.
 type pedido struct {
 	cli    armazenamento.Cliente
@@ -150,7 +162,7 @@ func (s *Servidor) direto(w http.ResponseWriter, r *http.Request, p *pedido) {
 		}
 	} else {
 		var b []byte
-		if b, err = io.ReadAll(io.LimitReader(resp.Body, maxResposta)); err == nil {
+		if b, err = lerResposta(resp.Body); err == nil {
 			uso = usoDe(b, false)
 			s.responderCorpo(w, p, b)
 		}
@@ -206,7 +218,7 @@ func (s *Servidor) comCache(w http.ResponseWriter, r *http.Request, p *pedido) {
 		if v != nil {
 			v.r, leitor = resp.Body, v
 		}
-		corpo, err := io.ReadAll(io.LimitReader(leitor, maxResposta))
+		corpo, err := lerResposta(leitor)
 		if err != nil {
 			return nil, causa(ctx, err)
 		}
@@ -281,10 +293,13 @@ func (s *Servidor) sombra(ctx context.Context, p *pedido, d gateway.Destino) {
 		if err != nil {
 			ev.Status = statusDe(err)
 		} else {
-			b, _ := io.ReadAll(io.LimitReader(resp.Body, maxResposta))
+			b, err := lerResposta(resp.Body)
 			resp.Body.Close()
 			uso := usoDe(b, false)
 			ev.Status, ev.TamanhoResposta = http.StatusOK, int64(len(b))
+			if err != nil {
+				ev.Status = statusDe(err)
+			}
 			ev.PromptTokens, ev.CompletionTokens = uso.PromptTokens, uso.CompletionTokens
 			ev.CustoMicro = s.d.Config.Custo(d.Modelo, uso, time.Now())
 		}
