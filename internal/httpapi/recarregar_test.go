@@ -16,8 +16,14 @@ import (
 func TestRecarregarConcorrenteNaoDesfazRevogacao(t *testing.T) {
 	c := novoCenario(t)
 	ctx := context.Background()
-	cli, _ := c.banco.CriarCliente(ctx, armazenamento.Cliente{Nome: "loja"})
-	texto, k, _ := c.banco.CriarChave(ctx, cli.ID)
+	cli, err := c.banco.CriarCliente(ctx, armazenamento.Cliente{Nome: "loja"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	texto, k, err := c.banco.CriarChave(ctx, cli.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	leu, solta := make(chan struct{}), make(chan struct{})
 	// Contador e não sync.Once: o Once faria a segunda chamada esperar a primeira, escondendo a corrida.

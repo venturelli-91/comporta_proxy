@@ -680,7 +680,8 @@ func TestLoginParaleloRespeitaLimite(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	if n := comparadas.Load(); n > 5 {
+	// Exatamente 5: menos indicaria limite consumindo demais (ou 429 para todos), mais seria a corrida.
+	if n := comparadas.Load(); n != 5 {
 		t.Fatalf("%d tentativas chegaram à comparação; o limite é 5", n)
 	}
 }
