@@ -173,3 +173,23 @@ func TestRelatorio(t *testing.T) {
 		t.Fatalf("GastoDoMes = %v, %v", gasto, err)
 	}
 }
+
+// Um ID removido nunca volta: senão o cliente novo herdaria histórico de uso, gasto do mês
+// e limitador do cliente removido.
+func TestIDNuncaReaproveitado(t *testing.T) {
+	b := abrir(t)
+	b.CriarCliente(ctx, Cliente{Nome: "a"})
+	velho, _ := b.CriarCliente(ctx, Cliente{Nome: "b"})
+	_, kVelha, _ := b.CriarChave(ctx, velho.ID)
+	if err := b.RemoverCliente(ctx, velho.ID); err != nil {
+		t.Fatal(err)
+	}
+	novo, _ := b.CriarCliente(ctx, Cliente{Nome: "c"})
+	if novo.ID == velho.ID {
+		t.Fatalf("cliente novo reaproveitou o ID %d do removido", novo.ID)
+	}
+	_, kNova, _ := b.CriarChave(ctx, novo.ID)
+	if kNova.ID == kVelha.ID {
+		t.Fatalf("chave nova reaproveitou o ID %d", kNova.ID)
+	}
+}

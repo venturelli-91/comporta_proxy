@@ -19,9 +19,11 @@ var ErrNaoEncontrado = errors.New("não encontrado")
 
 type Banco struct{ db *sql.DB }
 
+// AUTOINCREMENT: sem ele o SQLite reaproveita o maior ID removido, e um cliente novo herdaria
+// o histórico de uso, o gasto do mês e o limitador do cliente apagado.
 const schema = `
 CREATE TABLE IF NOT EXISTS clientes (
-	id INTEGER PRIMARY KEY,
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	nome TEXT NOT NULL,
 	rpm INTEGER NOT NULL DEFAULT 0,
 	orcamento_micro INTEGER NOT NULL DEFAULT 0,
@@ -31,7 +33,7 @@ CREATE TABLE IF NOT EXISTS clientes (
 	criado_em INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS chaves (
-	id INTEGER PRIMARY KEY,
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
 	prefixo TEXT NOT NULL,
 	hash TEXT NOT NULL UNIQUE,
