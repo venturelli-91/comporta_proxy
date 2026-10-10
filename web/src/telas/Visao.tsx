@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, num, usd, type EstadoDestino, type Relatorio } from "../api";
+import { botao, botaoSecundario, cartao, Selo } from "../ui";
 import { Estado } from "./Estado";
 
 export default function Visao() {
@@ -14,35 +15,71 @@ export default function Visao() {
   const t = uso.data.total;
   if (t.requisicoes === 0)
     return (
-      <p className="text-suave">
-        Nenhuma chamada nas últimas 24 horas. Crie um cliente em <a className="text-acento underline" href="#clientes">Clientes e chaves</a> e
-        mande a primeira pelo <a className="text-acento underline" href="#playground">Playground</a>.
-      </p>
+      <div className={`${cartao} max-w-xl space-y-4 p-6`}>
+        <h2 className="font-semibold">Nenhuma chamada nas últimas 24 horas</h2>
+        <p className="text-sm text-suave">
+          Cadastre um cliente para gerar uma chave <code className="font-mono">ck_</code> e mande a primeira chamada pelo Playground.
+          Os números, o gráfico e o estado dos provedores aparecem aqui em seguida.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <a className={botao} href="#clientes">
+            Cadastrar cliente
+          </a>
+          <a className={botaoSecundario} href="#playground">
+            Abrir o Playground
+          </a>
+        </div>
+      </div>
     );
 
+  const taxaErro = (100 * t.erros) / t.requisicoes;
   return (
     <div className="space-y-10">
       <Vazao r={uso.data} />
 
-      <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Numero rotulo="Gasto" valor={usd(t.custo_micro)} />
         <Numero rotulo="Economia do cache" valor={usd(t.economia_micro)} />
         <Numero rotulo="Latência p95" valor={`${num(t.p95_ms)} ms`} />
-        <Numero rotulo="Taxa de erro" valor={`${((100 * t.erros) / t.requisicoes).toFixed(1)}%`} alerta={t.erros > 0} />
-        <Numero rotulo="Dados pessoais protegidos" valor={num(t.pii)} />
+        <Numero rotulo="Taxa de erro" valor={`${taxaErro.toFixed(1)}%`} tom={taxaErro >= 5 ? "erro" : t.erros > 0 ? "alerta" : undefined} />
+        <Numero rotulo="Dados pessoais protegidos" valor={num(t.pii)} tom={t.pii > 0 ? "acento" : undefined} />
       </dl>
 
       <section aria-labelledby="g-minuto">
-        <h2 id="g-minuto" className="mb-3 font-medium">Requisições por minuto</h2>
-        <div className="h-56 rounded-lg border border-borda bg-superficie p-3">
+        <h2 id="g-minuto" className="mb-3 font-medium">
+          Requisições por minuto
+        </h2>
+        <div className={`${cartao} h-60 p-3 pt-5`}>
           <ResponsiveContainer>
-            <AreaChart data={uso.data.serie.map((p) => ({ ...p, hora: new Date(p.minuto * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) }))}>
+            <AreaChart
+              data={uso.data.serie.map((p) => ({
+                ...p,
+                hora: new Date(p.minuto * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+              }))}
+            >
+              <defs>
+                <linearGradient id="preenchimento" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--acento)" stopOpacity={0.28} />
+                  <stop offset="100%" stopColor="var(--acento)" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
               <CartesianGrid stroke="var(--borda)" vertical={false} />
-              <XAxis dataKey="hora" stroke="var(--suave)" fontSize={12} />
-              <YAxis stroke="var(--suave)" fontSize={12} allowDecimals={false} width={40} />
-              <Tooltip contentStyle={{ background: "var(--superficie)", border: "1px solid var(--borda)" }} />
-              <Area dataKey="requisicoes" name="Requisições" stroke="var(--acento)" fill="var(--acento-claro)" />
-              <Area dataKey="erros" name="Erros" stroke="var(--erro)" fill="transparent" />
+              <XAxis dataKey="hora" stroke="var(--suave)" fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke="var(--suave)" fontSize={12} allowDecimals={false} width={36} tickLine={false} axisLine={false} />
+              <Tooltip
+                cursor={{ stroke: "var(--suave)", strokeDasharray: "3 3" }}
+                contentStyle={{
+                  background: "var(--superficie)",
+                  border: "1px solid var(--borda)",
+                  borderRadius: 8,
+                  boxShadow: "var(--sombra)",
+                  fontSize: 13,
+                }}
+                labelStyle={{ color: "var(--texto)", fontWeight: 500 }}
+                itemStyle={{ color: "var(--texto)" }}
+              />
+              <Area dataKey="requisicoes" name="Requisições" stroke="var(--acento)" strokeWidth={2} fill="url(#preenchimento)" />
+              <Area dataKey="erros" name="Erros" stroke="var(--erro)" strokeWidth={1.5} fill="transparent" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -50,26 +87,28 @@ export default function Visao() {
 
       <div className="grid gap-10 lg:grid-cols-[2fr_1fr]">
         <section aria-labelledby="t-clientes">
-          <h2 id="t-clientes" className="mb-3 font-medium">Por cliente</h2>
-          <div className="overflow-x-auto">
+          <h2 id="t-clientes" className="mb-3 font-medium">
+            Por cliente
+          </h2>
+          <div className={`${cartao} overflow-x-auto`}>
             <table className="w-full text-sm">
               <thead className="text-left text-suave">
                 <tr className="border-b border-borda">
-                  <th className="py-2 font-normal">Cliente</th>
-                  <th className="py-2 text-right font-normal">Requisições</th>
-                  <th className="py-2 text-right font-normal">Cache</th>
-                  <th className="py-2 text-right font-normal">Gasto</th>
-                  <th className="py-2 text-right font-normal">Erros</th>
+                  <th className="px-4 py-2.5 font-medium">Cliente</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Requisições</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Cache</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Gasto</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Erros</th>
                 </tr>
               </thead>
               <tbody>
                 {uso.data.por_cliente.map((g) => (
-                  <tr key={g.nome} className="border-b border-borda last:border-0">
-                    <td className="py-2">{g.nome}</td>
-                    <td className="py-2 text-right">{num(g.requisicoes)}</td>
-                    <td className="py-2 text-right">{num(g.cache_hits)}</td>
-                    <td className="py-2 text-right">{usd(g.custo_micro)}</td>
-                    <td className={`py-2 text-right ${g.erros ? "text-erro" : ""}`}>{num(g.erros)}</td>
+                  <tr key={g.nome} className="border-b border-borda last:border-0 hover:bg-realce">
+                    <td className="px-4 py-2.5 font-medium">{g.nome}</td>
+                    <td className="px-4 py-2.5 text-right">{num(g.requisicoes)}</td>
+                    <td className="px-4 py-2.5 text-right">{num(g.cache_hits)}</td>
+                    <td className="px-4 py-2.5 text-right">{usd(g.custo_micro)}</td>
+                    <td className={`px-4 py-2.5 text-right ${g.erros ? "font-medium text-erro" : "text-suave"}`}>{num(g.erros)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -77,11 +116,13 @@ export default function Visao() {
           </div>
         </section>
         <section aria-labelledby="t-prov">
-          <h2 id="t-prov" className="mb-3 font-medium">Provedores</h2>
-          <ul className="space-y-2 text-sm">
+          <h2 id="t-prov" className="mb-3 font-medium">
+            Provedores
+          </h2>
+          <ul className={`${cartao} divide-y divide-borda text-sm`}>
             {prov.data?.map((p) => (
-              <li key={p.destino} className="flex items-center justify-between gap-3">
-                <span className="truncate">{p.destino}</span>
+              <li key={p.destino} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <span className="truncate font-mono text-[13px]">{p.destino}</span>
                 <Breaker estado={p.breaker} abertos={p.abertos} />
               </li>
             ))}
@@ -106,17 +147,22 @@ function Vazao({ r }: { r: Relatorio }) {
   ];
   return (
     <section aria-label="Vazão nas últimas 24 horas">
-      <p className="mb-3 text-3xl font-semibold tracking-tight">
-        {num(t.requisicoes)} chamadas chegaram; {num(provedor)} foram pagas.
+      <p className="mb-1 text-sm text-suave">Últimas 24 horas</p>
+      <p className="mb-4 text-3xl font-semibold tracking-tight">
+        {num(t.requisicoes)} chamadas chegaram; <span className="text-acento">{num(provedor)} foram pagas</span>.
       </p>
-      <div className="flex h-4 overflow-hidden rounded-full bg-borda" role="img" aria-label={partes.map((p) => `${p.nome}: ${p.n}`).join(", ")}>
-        {partes.map((p) => p.n > 0 && <div key={p.nome} className={p.cor} style={{ flexGrow: p.n }} />)}
+      <div
+        className="flex h-3 gap-0.5 overflow-hidden rounded-full bg-borda"
+        role="img"
+        aria-label={partes.map((p) => `${p.nome}: ${p.n}`).join(", ")}
+      >
+        {partes.map((p) => p.n > 0 && <div key={p.nome} className={`${p.cor} transition-[flex-grow] duration-500 ease-out`} style={{ flexGrow: p.n }} />)}
       </div>
       <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-suave">
         {partes.map((p) => (
           <li key={p.nome} className="flex items-center gap-2">
             <span className={`inline-block size-2.5 rounded-full ${p.cor}`} aria-hidden />
-            {p.nome}: <span className="text-texto">{num(p.n)}</span>
+            {p.nome}: <span className="font-medium text-texto">{num(p.n)}</span>
           </li>
         ))}
       </ul>
@@ -124,18 +170,18 @@ function Vazao({ r }: { r: Relatorio }) {
   );
 }
 
-function Numero({ rotulo, valor, alerta }: { rotulo: string; valor: string; alerta?: boolean }) {
+const corValor = { acento: "text-acento", alerta: "text-alerta", erro: "text-erro" } as const;
+function Numero({ rotulo, valor, tom }: { rotulo: string; valor: string; tom?: keyof typeof corValor }) {
   return (
-    <div>
+    <div className={`${cartao} px-4 py-3`}>
       <dt className="text-sm text-suave">{rotulo}</dt>
-      <dd className={`text-xl font-medium ${alerta ? "text-alerta" : ""}`}>{valor}</dd>
+      <dd className={`mt-1 text-xl font-semibold tracking-tight ${tom ? corValor[tom] : ""}`}>{valor}</dd>
     </div>
   );
 }
 
 function Breaker({ estado, abertos }: { estado: string; abertos: number }) {
   const base = { closed: "Normal", "half-open": "Testando", open: "Breaker aberto" }[estado] ?? estado;
-  const rotulo = abertos ? `${base} para ${abertos} ${abertos === 1 ? "cliente" : "clientes"}` : base;
-  const cor = estado === "closed" ? "text-acento" : estado === "open" ? "text-erro" : "text-alerta";
-  return <span className={`shrink-0 ${cor}`}>{rotulo}</span>;
+  const rotulo = abertos ? `${base} · ${abertos} ${abertos === 1 ? "cliente" : "clientes"}` : base;
+  return <Selo tom={estado === "closed" ? "ok" : estado === "open" ? "erro" : "alerta"}>{rotulo}</Selo>;
 }

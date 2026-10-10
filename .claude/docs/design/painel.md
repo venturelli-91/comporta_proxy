@@ -19,11 +19,13 @@ para dar estado (ok, alerta, erro).
 
 Tipografia: system-ui para a interface; números em `font-variant-numeric: tabular-nums`; monoespaçada só para chaves e IDs.
 
+Tema: segue o sistema por padrão; o seletor na navegação (claro, escuro, sistema) grava em `localStorage` e o `index.html` aplica `data-tema` antes da primeira pintura. Tokens extras: `--lateral` (navegação), `--realce` (hover), `--sobre-acento` (texto no botão teal). Componentes compartilhados em `web/src/ui.tsx` (botão, campo, cartão, selo, esqueleto, ícones SVG inline). Tudo que é clicável tem ponteiro, hover e foco visível.
+
 ## Telas
 1. **Visão geral:** cartões (requisições, custo, economia do cache, p95, taxa de erro, PII mascarada), gráfico de requisições por minuto, tabela por cliente e estado dos provedores.
 2. **Clientes e chaves:** tabela com RPM, orçamento, cache e LGPD; formulário de criação; a chave nova aparece num aviso com botão de copiar, uma única vez.
 3. **Shadow:** por alias com sombra, mostra principal × sombra em latência média, custo médio e tamanho médio da resposta.
-4. **Playground:** chave `ck_`, alias, mensagem, stream ligado ou desligado; resposta ao vivo, TTFT e tokens.
+4. **Playground:** chave `ck_`, alias, mensagem, stream; lado a lado "O que o provedor recebeu" (cabeçalho `X-Comporta-Enviado`, marcadores realçados) e "O que voltou para você"; chips com TTFT, total, tokens e request id.
 
 ## Estados
 Toda tela tem carregando (esqueleto), vazio (o que fazer a seguir) e erro (mensagem do `erro.mensagem` + tentar de novo).

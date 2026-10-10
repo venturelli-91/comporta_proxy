@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -835,5 +836,30 @@ func TestEncerrarEsperaRequisicaoCortada(t *testing.T) {
 	c.s.Encerrar(ctx)
 	if n := c.s.met.requisicoes.Load(); n != 1 {
 		t.Fatalf("requisições registradas = %d, queria 1: Encerrar voltou antes do handler registrar o uso", n)
+	}
+}
+
+// O Playground mostra o que saiu para o provedor: o cabeçalho traz a última mensagem do
+// usuário já mascarada (base64), e só existe para cliente com LGPD ligado.
+func TestCabecalhoEnviadoMostraMascarado(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(fmt.Sprint("stream=", stream), func(t *testing.T) {
+			c := novoCenario(t)
+			_, comLGPD := c.novoCliente(armazenamento.Cliente{Nome: "loja", LGPD: true})
+			_, semLGPD := c.novoCliente(armazenamento.Cliente{Nome: "outra"})
+
+			resp := c.chat(comLGPD, msg("rapido", "meu CPF é 529.982.247-25", stream))
+			resp.Body.Close()
+			b, err := base64.StdEncoding.DecodeString(resp.Header.Get("X-Comporta-Enviado"))
+			if err != nil || !strings.Contains(string(b), "[CPF_1]") || strings.Contains(string(b), "529.982.247-25") {
+				t.Fatalf("cabeçalho = %q (err %v): devia trazer o texto mascarado", b, err)
+			}
+
+			resp = c.chat(semLGPD, msg("rapido", "oi", stream))
+			resp.Body.Close()
+			if h := resp.Header.Get("X-Comporta-Enviado"); h != "" {
+				t.Fatalf("sem LGPD não há o que mostrar, veio %q", h)
+			}
+		})
 	}
 }
