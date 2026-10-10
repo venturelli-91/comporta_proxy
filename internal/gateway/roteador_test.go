@@ -161,20 +161,56 @@ func TestSemaforoCheioDevolveOcupado(t *testing.T) {
 	}
 }
 
-// Um provedor que trava em toda chamada é o caso clássico do breaker: o prazo estourado
-// pelo próprio gateway tem que contar como falha (só o cancelamento do cliente é excluído).
-func TestBreakerContaTimeout(t *testing.T) {
+// Um provedor que trava em toda chamada é o caso clássico do breaker: o corte do watchdog
+// (cancelamento com causa própria) conta como falha.
+func TestBreakerContaWatchdog(t *testing.T) {
 	trava := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body) // sem ler o corpo o servidor não percebe a desconexão
 		<-r.Context().Done()
 	})
 	r := novoCenario(t, trava, &provedor.Falso{}, 10)
+	errWatchdog := errors.New("watchdog")
 	for range 5 {
+		ctx, cancel := context.WithCancelCause(context.Background())
+		relogio := time.AfterFunc(20*time.Millisecond, func() { cancel(errWatchdog) })
+		_, _, _ = r.Chamar(ctx, "rapido", corpoChat())
+		relogio.Stop()
+		cancel(nil)
+	}
+	if e := r.Estado(); e[0].Breaker != "open" {
+		t.Fatalf("breaker = %+v, queria aberto depois de 5 cortes do watchdog", e)
+	}
+}
+
+// O prazo total é do pedido (um cliente pode mandar gerações enormes de propósito): estourá-lo
+// não pode derrubar o destino para todos os clientes.
+func TestPrazoTotalNaoAbreBreaker(t *testing.T) {
+	trava := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		<-r.Context().Done()
+	})
+	r := novoCenario(t, trava, &provedor.Falso{}, 10)
+	for range 6 {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		_, _, _ = r.Chamar(ctx, "rapido", corpoChat())
 		cancel()
 	}
-	if e := r.Estado(); e[0].Breaker != "open" {
-		t.Fatalf("breaker = %+v, queria aberto depois de 5 timeouts", e)
+	if e := r.Estado(); e[0].Breaker != "closed" {
+		t.Fatalf("breaker = %+v: prazo do pedido abriu o breaker compartilhado", e)
+	}
+}
+
+// 401/402/403 do provedor é problema da conta do gateway (chave inválida, sem saldo), não do
+// pedido do cliente: tenta o próximo destino.
+func TestContaDoProvedorComProblemaFazFallback(t *testing.T) {
+	semSaldo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = w.Write([]byte(`{"error":{"message":"saldo insuficiente"}}`))
+	})
+	b := &provedor.Falso{}
+	r := novoCenario(t, semSaldo, b, 10)
+	d, err := chamar(t, r)
+	if err != nil || d.Provedor != "b" {
+		t.Fatalf("destino = %v, erro = %v: queria o fallback b", d, err)
 	}
 }

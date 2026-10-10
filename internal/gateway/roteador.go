@@ -66,17 +66,24 @@ func novoBreaker(nome string) *gobreaker.CircuitBreaker[*http.Response] {
 		ReadyToTrip: func(c gobreaker.Counts) bool {
 			return c.Requests >= 5 && c.TotalFailures*2 >= c.Requests
 		},
-		// Erro do cliente (400, 422...) não indica provedor doente.
-		IsSuccessful: func(err error) bool { return err == nil || erroDoCliente(err) },
-		// Cliente que desistiu não diz nada sobre a saúde do provedor. Já um prazo estourado
-		// (do gateway) conta como falha: provedor travado é o caso clássico do breaker.
-		IsExcluded: func(err error) bool { return errors.Is(err, context.Canceled) },
+		// Pedido malformado (400, 413, 422) não indica provedor doente.
+		IsSuccessful: func(err error) bool { return err == nil || erroDoPedido(err) },
+		// O breaker é compartilhado por todos os clientes, então só conta o que é culpa do
+		// provedor. Fica de fora o cliente que desistiu e o prazo total do pedido: um cliente
+		// mandando gerações enormes de propósito não pode derrubar o destino para os outros.
+		// O corte do watchdog (cancelamento com causa própria: provedor sem resposta) conta.
+		IsExcluded: func(err error) bool {
+			return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+		},
 	})
 }
 
-func erroDoCliente(err error) bool {
+// erroDoPedido: o provedor recusou o pedido em si; falharia igual em qualquer destino.
+// 401/402/403 ficam de fora de propósito: são problema da conta do gateway no provedor
+// (chave inválida, sem saldo) e o próximo destino pode atender.
+func erroDoPedido(err error) bool {
 	var e *provedor.ErroHTTP
-	return errors.As(err, &e) && e.Status >= 400 && e.Status < 500 && e.Status != 429
+	return errors.As(err, &e) && (e.Status == 400 || e.Status == 413 || e.Status == 422)
 }
 
 // Chamar tenta os destinos do alias em ordem. Devolve a resposta 2xx aberta: quem chama lê o
@@ -106,8 +113,8 @@ func (r *Roteador) Chamar(ctx context.Context, alias string, corpo map[string]js
 			return resp, d, nil
 		}
 		ultimo = err
-		// Erro do cliente falharia igual no próximo destino; contexto morto não tem para quem responder.
-		if erroDoCliente(err) || ctx.Err() != nil {
+		// Pedido malformado falharia igual no próximo destino; contexto morto não tem para quem responder.
+		if erroDoPedido(err) || ctx.Err() != nil {
 			break
 		}
 	}

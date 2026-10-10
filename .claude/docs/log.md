@@ -23,3 +23,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 09/10 | Correções da revisão final | `fix(httpapi)` | 7 achados importantes corrigidos com teste RED→GREEN; relay sem goroutine (vigia); 104 testes; race 2x ok |
 | 09/10 | Segurança: ID reaproveitado | `fix(armazenamento)` | AUTOINCREMENT em clientes e chaves; bancos antigos precisam ser recriados (MVP sem dados de produção) |
 | 09/10 | Segurança: limite simultâneo por cliente | `fix(httpapi)` | 32 requisições abertas por chave (abaixo da concorrência do alias); acima disso 429 concorrencia_excedida |
+| 09/10 | Segurança: breaker compartilhado | `fix(gateway)` | prazo total do pedido não abre o breaker (só o watchdog conta); 401/402/403 do provedor fazem fallback |
