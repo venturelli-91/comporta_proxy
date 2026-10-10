@@ -1,9 +1,18 @@
+# Painel: build do React, embutido no binário Go pelo go:embed.
+FROM node:24-alpine AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
 # Build: binário estático (sem cgo, graças ao modernc.org/sqlite).
 FROM golang:1.27 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+COPY --from=web /web/dist ./web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /comporta ./cmd/comporta \
  && mkdir -p /dados && chown 65532:65532 /dados
 

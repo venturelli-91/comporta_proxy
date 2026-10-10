@@ -16,3 +16,4 @@ Uma linha por feature ou decisão. Mais recente embaixo.
 | 09/10 | 07 | `feat(armazenamento)` | Chave rand.Text 128 bits só como SHA-256; lote 500/1s drenado no shutdown; p95 por OFFSET |
 | 09/10 | 08 | `feat(httpapi)` | Bench overhead ~0,19 ms/req (loopback); singleflight 10→1; 499 e 504 testados; mutantes LGPD/singleflight mortos |
 | 09/10 | 09 | `feat` | Imagem distroless 23,5 MB; smoke curl ok; SIGTERM drena uso |
+| 09/10 | 10 | `feat(web)` | Barra de vazão como elemento central; bug do TanStack v5 (query undefined) pego no screenshot; imagem 24,3 MB com painel |

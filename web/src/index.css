@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/* Tokens de .claude/docs/design/painel.md. Água: teal sobre cinza-esverdeado frio. */
+:root {
+  --fundo: #f3f5f4;
+  --superficie: #ffffff;
+  --texto: #14201d;
+  --suave: #5b6b66;
+  --borda: #dfe5e2;
+  --acento: #0f766e;
+  --acento-claro: #99d5cc;
+  --alerta: #b45309;
+  --erro: #b91c1c;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #0f1513;
+    --superficie: #17201d;
+    --texto: #e4ebe8;
+    --suave: #93a39e;
+    --borda: #26332f;
+    --acento: #2dd4bf;
+    --acento-claro: #1d5c55;
+    --alerta: #f59e0b;
+    --erro: #f87171;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-fundo: var(--fundo);
+  --color-superficie: var(--superficie);
+  --color-texto: var(--texto);
+  --color-suave: var(--suave);
+  --color-borda: var(--borda);
+  --color-acento: var(--acento);
+  --color-acento-claro: var(--acento-claro);
+  --color-alerta: var(--alerta);
+  --color-erro: var(--erro);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--acento);
+}
+
+body {
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
