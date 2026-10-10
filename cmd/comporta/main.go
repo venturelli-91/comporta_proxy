@@ -66,7 +66,7 @@ func rodar(log *slog.Logger) error {
 			}
 			log.Warn("sem chave para o provedor: usando o provedor falso", "provedor", nome, "env", p.ChaveEnv)
 		}
-		clientes[nome] = provedor.Novo(nome, base, chave, max(p.MaxConexoes, 10), cfg.Timeouts.Conexao())
+		clientes[nome] = provedor.Novo(base, chave, max(p.MaxConexoes, 10), cfg.Timeouts.Conexao())
 	}
 
 	banco, err := armazenamento.Abrir(env("DB_PATH", "comporta.db"))

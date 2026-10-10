@@ -82,7 +82,7 @@ func novoCenario(t testing.TB) *cenario {
 	for nome, h := range servidores {
 		srv := httptest.NewServer(h)
 		t.Cleanup(srv.Close)
-		clientes[nome] = provedor.Novo(nome, srv.URL, "", 50, time.Second)
+		clientes[nome] = provedor.Novo(srv.URL, "", 50, time.Second)
 		provs[nome] = gateway.ProvedorCfg{}
 	}
 	cfg := &gateway.Config{

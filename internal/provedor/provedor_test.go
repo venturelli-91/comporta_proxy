@@ -18,7 +18,7 @@ func novoFalso(t *testing.T, f *Falso) *Cliente {
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	return Novo("falso", srv.URL, "segredo", 10, time.Second)
+	return Novo(srv.URL, "segredo", 10, time.Second)
 }
 
 func TestEnviarSemStream(t *testing.T) {
@@ -76,7 +76,7 @@ func TestEnviarErros(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error":{"message":"devagar"}}`))
 		}))
 		defer srv.Close()
-		_, err := Novo("x", srv.URL, "", 1, time.Second).Enviar(context.Background(), []byte(corpoTeste))
+		_, err := Novo(srv.URL, "", 1, time.Second).Enviar(context.Background(), []byte(corpoTeste))
 		var e *ErroHTTP
 		if !errors.As(err, &e) || e.RetryAfter != 2*time.Second || e.Mensagem != "devagar" {
 			t.Fatalf("erro = %#v", err)
@@ -90,7 +90,7 @@ func TestEnviarErros(t *testing.T) {
 		}
 	})
 	t.Run("rede fora do ar é repetível", func(t *testing.T) {
-		_, err := Novo("x", "http://127.0.0.1:1", "", 1, time.Second).Enviar(context.Background(), []byte(corpoTeste))
+		_, err := Novo("http://127.0.0.1:1", "", 1, time.Second).Enviar(context.Background(), []byte(corpoTeste))
 		var e *ErroHTTP
 		if !errors.As(err, &e) || e.Status != 0 || !e.Repetivel() {
 			t.Fatalf("erro = %v", err)

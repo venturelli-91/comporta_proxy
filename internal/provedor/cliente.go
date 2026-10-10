@@ -15,7 +15,6 @@ import (
 )
 
 type Cliente struct {
-	Nome    string
 	baseURL string
 	chave   string
 	http    *http.Client
@@ -23,7 +22,7 @@ type Cliente struct {
 
 // Novo cria um cliente com transporte próprio. O padrão do Go guarda só 2 conexões ociosas
 // por host: sob carga isso força handshakes TLS novos o tempo todo.
-func Novo(nome, baseURL, chave string, maxConexoes int, timeoutConexao time.Duration) *Cliente {
+func Novo(baseURL, chave string, maxConexoes int, timeoutConexao time.Duration) *Cliente {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.MaxIdleConns = maxConexoes
 	t.MaxIdleConnsPerHost = maxConexoes
@@ -32,7 +31,7 @@ func Novo(nome, baseURL, chave string, maxConexoes int, timeoutConexao time.Dura
 	t.ForceAttemptHTTP2 = true
 	t.DialContext = (&net.Dialer{Timeout: timeoutConexao, KeepAlive: 30 * time.Second}).DialContext
 	// Sem http.Client.Timeout: ele cortaria streams longos. Os prazos vêm do context.
-	return &Cliente{Nome: nome, baseURL: baseURL, chave: chave, http: &http.Client{Transport: t}}
+	return &Cliente{baseURL: baseURL, chave: chave, http: &http.Client{Transport: t}}
 }
 
 // ErroHTTP é uma falha do provedor. Status 0 significa erro de rede (sem resposta).

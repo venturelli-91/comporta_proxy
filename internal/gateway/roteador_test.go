@@ -36,7 +36,7 @@ func novoCenario(t *testing.T, a, b http.Handler, concorrencia int) *Roteador {
 	for nome, h := range map[string]http.Handler{"a": a, "b": b} {
 		srv := httptest.NewServer(h)
 		t.Cleanup(srv.Close)
-		clientes[nome] = provedor.Novo(nome, srv.URL, "", 10, time.Second)
+		clientes[nome] = provedor.Novo(srv.URL, "", 10, time.Second)
 	}
 	r := NovoRoteador(cfg, clientes)
 	r.baseRetry = time.Millisecond

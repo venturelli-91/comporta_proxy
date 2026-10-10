@@ -3,7 +3,7 @@
 **Pacote:** `internal/provedor` (`cliente.go`, `falso.go`)
 
 ## O que faz
-- `Cliente.Enviar(ctx, corpo)` faz o `POST /chat/completions` em qualquer API compatível com OpenAI. Resposta 2xx volta como está, para o relay ler em stream. Qualquer outra vira `*ErroHTTP{Status, RetryAfter, Mensagem}`.
+- `Novo(baseURL, chave, maxConexoes, timeoutConexao)` cria o cliente; `Cliente.Enviar(ctx, corpo)` faz o `POST /chat/completions` em qualquer API compatível com OpenAI. Resposta 2xx volta como está, para o relay ler em stream. Qualquer outra vira `*ErroHTTP{Status, RetryAfter, Mensagem}`.
 - `Falso` é um `http.Handler` que imita a DeepSeek: ecoa a última mensagem, manda `: keep-alive`, traz `usage` no último chunk e termina com `[DONE]`. Latência, velocidade por token e taxa de 503 são configuráveis.
 
 ## Por que assim (decisões)
