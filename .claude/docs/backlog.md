@@ -13,7 +13,7 @@ Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
 - [x] 08 API HTTP: chat (com e sem stream), auth, rate limit, orçamento, cache + singleflight, shadow, admin, métricas
 - [x] 09 Binário + Docker + compose
 - [x] 10 Painel React
-- [ ] 11 k6 contra o falso, números no README
+- [x] 11 k6 contra o falso, números no README
 - [ ] 12 Auditoria ponytail, README, PR
 
 ## Depois da entrevista (P1/P2)
