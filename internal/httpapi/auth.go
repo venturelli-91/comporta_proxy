@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -110,12 +111,44 @@ func (s *Servidor) virarMes() {
 	}
 }
 
-const cookieAdmin = "comporta_admin"
+const (
+	cookieAdmin   = "comporta_admin"
+	duracaoSessao = 12 * time.Hour
+)
 
-// O cookie guarda o SHA-256 do token, não o token: um cookie vazado não serve como Bearer.
-func (s *Servidor) valorCookie() string {
-	h := sha256.Sum256([]byte("cookie:" + s.d.AdminToken))
+// Sessões do painel: o cookie leva um valor aleatório e o servidor guarda só o SHA-256 dele,
+// com a validade. Logout apaga a sessão, então um cookie copiado deixa de valer na hora.
+// ponytail: sessões em memória (somem no restart, um login a mais); Redis quando houver várias instâncias.
+func hashSessao(v string) string {
+	h := sha256.Sum256([]byte(v))
 	return hex.EncodeToString(h[:])
+}
+
+func (s *Servidor) novaSessao() string {
+	v := rand.Text()
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	agora := time.Now()
+	for k, expira := range s.sessoes { // aproveita para limpar as vencidas
+		if agora.After(expira) {
+			delete(s.sessoes, k)
+		}
+	}
+	s.sessoes[hashSessao(v)] = agora.Add(duracaoSessao)
+	return v
+}
+
+func (s *Servidor) sessaoValida(v string) bool {
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	expira, ok := s.sessoes[hashSessao(v)]
+	return ok && time.Now().Before(expira)
+}
+
+func (s *Servidor) encerrarSessao(v string) {
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	delete(s.sessoes, hashSessao(v))
 }
 
 func iguais(a, b string) bool { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
@@ -126,7 +159,7 @@ func (s *Servidor) admin(h http.HandlerFunc) http.HandlerFunc {
 		if t, temBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); temBearer {
 			ok = iguais(t, s.d.AdminToken)
 		} else if c, err := r.Cookie(cookieAdmin); err == nil {
-			ok = iguais(c.Value, s.valorCookie())
+			ok = s.sessaoValida(c.Value)
 		}
 		if s.d.AdminToken == "" || !ok {
 			erro(w, http.StatusUnauthorized, "nao_autorizado", "login de admin necessário")

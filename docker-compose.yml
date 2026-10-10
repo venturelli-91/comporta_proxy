@@ -6,7 +6,8 @@ services:
       - path: .env
         required: false
     environment:
-      ADMIN_TOKEN: ${ADMIN_TOKEN:-troque-este-token}
+      # Sem padrão: um token conhecido numa porta publicada abriria o painel para qualquer um.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?defina ADMIN_TOKEN no .env (copie o .env.example)}
     volumes:
       - dados:/dados
 volumes:

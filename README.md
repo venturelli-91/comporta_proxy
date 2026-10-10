@@ -37,7 +37,8 @@ k6 com 1.000 req/s por 30 s, gateway e k6 na mesma rede Docker, provedor falso c
 ## Rodar
 
 ```bash
-docker compose up --build            # http://localhost:8080 (token do painel: ADMIN_TOKEN, padrão troque-este-token)
+cp .env.example .env                 # defina ADMIN_TOKEN (o compose não sobe sem ele)
+docker compose up --build            # http://localhost:8080, login com o ADMIN_TOKEN
 # ou
 go run ./cmd/comporta                 # sem DEEPSEEK_API_KEY usa o provedor falso; imprime um ADMIN_TOKEN se não houver
 ```

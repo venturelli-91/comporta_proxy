@@ -29,18 +29,29 @@ func (s *Servidor) rotasAdmin(mux *http.ServeMux) {
 }
 
 func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
+	// Limite global de tentativas: o token do admin é a chave de tudo, não pode ser chutado.
+	if !s.tentativas.Allow() {
+		retryAfter(w, time.Minute)
+		erro(w, http.StatusTooManyRequests, "muitas_tentativas", "muitas tentativas de login, aguarde um minuto")
+		return
+	}
 	var v struct{ Token string }
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&v)
 	if s.d.AdminToken == "" || !iguais(v.Token, s.d.AdminToken) {
 		erro(w, http.StatusUnauthorized, "nao_autorizado", "token de admin inválido")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: cookieAdmin, Value: s.valorCookie(), Path: "/", MaxAge: 12 * 3600,
-		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil})
+	// Atrás do TLS do Cloud Run a requisição chega em HTTP puro, com X-Forwarded-Proto.
+	seguro := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+	http.SetCookie(w, &http.Cookie{Name: cookieAdmin, Value: s.novaSessao(), Path: "/", MaxAge: int(duracaoSessao.Seconds()),
+		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: seguro})
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Servidor) logout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(cookieAdmin); err == nil {
+		s.encerrarSessao(c.Value)
+	}
 	http.SetCookie(w, &http.Cookie{Name: cookieAdmin, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	w.WriteHeader(http.StatusNoContent)
 }

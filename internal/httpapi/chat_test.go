@@ -582,3 +582,62 @@ func TestLimiteSimultaneoPorCliente(t *testing.T) {
 		t.Fatalf("outro cliente foi afetado: %q", got)
 	}
 }
+
+func (c *cenario) login(token string, headers ...string) *http.Response {
+	c.t.Helper()
+	req, _ := http.NewRequest("POST", c.url+"/admin/login", strings.NewReader(`{"token":"`+token+`"}`))
+	for i := 0; i+1 < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp
+}
+
+func (c *cenario) comCookie(metodo, caminho string, ck *http.Cookie) int {
+	c.t.Helper()
+	req, _ := http.NewRequest(metodo, c.url+caminho, nil)
+	req.AddCookie(ck)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+// Um cookie copiado não pode continuar valendo depois do logout.
+func TestLogoutRevogaSessao(t *testing.T) {
+	c := novoCenario(t)
+	ck := c.login(tokenAdmin).Cookies()[0]
+	if st := c.comCookie("GET", "/admin/sessao", ck); st != 204 {
+		t.Fatalf("sessão recém-criada: %d", st)
+	}
+	c.comCookie("POST", "/admin/logout", ck)
+	if st := c.comCookie("GET", "/admin/sessao", ck); st != 401 {
+		t.Fatalf("cookie depois do logout ainda vale: %d", st)
+	}
+}
+
+func TestLoginLimitaTentativas(t *testing.T) {
+	c := novoCenario(t)
+	var ultimo int
+	for range 6 {
+		ultimo = c.login("chute").StatusCode
+	}
+	if ultimo != 429 {
+		t.Fatalf("6ª tentativa errada seguida: status %d, queria 429", ultimo)
+	}
+}
+
+// Atrás do TLS do Cloud Run a requisição chega em HTTP puro; o cookie ainda precisa de Secure.
+func TestCookieSecureAtrasDeProxy(t *testing.T) {
+	c := novoCenario(t)
+	ck := c.login(tokenAdmin, "X-Forwarded-Proto", "https").Cookies()[0]
+	if !ck.Secure || !ck.HttpOnly || ck.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("cookie = %+v", ck)
+	}
+}
