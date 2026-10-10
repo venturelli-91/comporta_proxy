@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -55,6 +56,7 @@ type cenario struct {
 	falso    *provedor.Falso
 	espiao   *espiao
 	banco    *armazenamento.Banco
+	dbPath   string // para testes que leem a tabela de uso direto
 	pararUso func()
 }
 
@@ -121,7 +123,8 @@ func novoCenario(t testing.TB) *cenario {
 		},
 		Precos: map[string]gateway.PrecoCfg{"m1": {EntradaCacheMiss: 100, Saida: 1000}, "m2": {EntradaCacheMiss: 200, Saida: 2000}},
 	}
-	b, err := armazenamento.Abrir(filepath.Join(t.TempDir(), "teste.db"))
+	c.dbPath = filepath.Join(t.TempDir(), "teste.db")
+	b, err := armazenamento.Abrir(c.dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -471,6 +474,16 @@ func TestClienteDesconectaNoMeioDoStream(t *testing.T) {
 	r := c.relatorio()
 	if r.Total.Requisicoes != 1 || r.Total.Erros != 1 {
 		t.Fatalf("desconexão devia virar um evento com status 499: %+v", r.Total)
+	}
+	// Erros conta qualquer status >= 400: confere que é o 499 (cliente desistiu), não um 502.
+	db, err := sql.Open("sqlite", c.dbPath) // driver registrado pelo pacote armazenamento
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var status int
+	if err := db.QueryRow(`SELECT status FROM uso WHERE shadow = 0`).Scan(&status); err != nil || status != 499 {
+		t.Fatalf("status registrado = %d (err %v), queria 499", status, err)
 	}
 }
 
