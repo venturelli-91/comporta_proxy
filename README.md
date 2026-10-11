@@ -4,6 +4,9 @@ An LLM gateway written in Go. It sits between a company's applications and AI pr
 OpenAI-compatible API) and handles what usually gets out of control: who is using it, how much it costs,
 the same question paid for twice, the provider that goes down, and personal data leaking out of the country.
 
+New here? Start with the **[project overview](docs/OVERVIEW.md)**: the problem, how a request flows, how the
+personal-data masking works, the measured numbers and the main design decisions.
+
 ![Comporta dashboard](docs/img/painel.png)
 
 ## Live demo
