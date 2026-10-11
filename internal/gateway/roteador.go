@@ -65,6 +65,8 @@ type chaveBreaker struct {
 }
 
 // breaker devolve (criando na primeira vez) o breaker do cliente para o destino.
+// ponytail: breakers de cliente removido ficam no mapa (clientes × destinos, IDs nunca reaproveitados).
+// Um Esquecer(cliente) chamado pelo admin resolve se isso crescer.
 func (r *Roteador) breaker(cliente int64, d Destino) *gobreaker.CircuitBreaker[*http.Response] {
 	k := chaveBreaker{cliente, d.String()}
 	r.brMu.Lock()
