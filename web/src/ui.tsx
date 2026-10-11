@@ -95,13 +95,16 @@ const IconeMonitor = () => (
   </Icone>
 );
 
-// Brand: the floodgate itself (two posts and two boards) in ink, with the boards in teal; the same as the favicon.
+// Brand: one channel in, three outlets of decreasing length (paid, cache, blocked), the same drawing as
+// the Overview's floodgate; only the main outlet is teal. The favicon in index.html is the same mark.
 export function Marca() {
   return (
     <span className="inline-flex items-center gap-2 text-[15px] font-semibold tracking-tight">
-      <svg viewBox="0 0 24 24" className="size-5.5" aria-hidden>
-        <path d="M5 3v18M19 3v18" stroke="var(--texto)" strokeWidth="2.5" strokeLinecap="square" />
-        <path d="M5 9.5h14M5 15h14" stroke="var(--acento)" strokeWidth="3" />
+      <svg viewBox="0 0 32 32" className="size-5.5" aria-hidden>
+        <path d="M2 16h7M9 6.5v19" stroke="var(--texto)" strokeWidth="2.5" fill="none" />
+        <rect x="9" y="4" width="21" height="5" fill="var(--acento)" />
+        <rect x="9" y="13.5" width="12" height="5" fill="var(--texto)" />
+        <rect x="9" y="23" width="4" height="5" fill="var(--texto)" />
       </svg>
       Comporta
     </span>
