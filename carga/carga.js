@@ -65,8 +65,8 @@ export function teardown(d) {
   const req = delta("comporta_requisicoes_total");
   const hits = delta("comporta_cache_hits_total");
   console.log(
-    `requisições=${req} erros=${delta("comporta_erros_total")} cache_hits=${hits} ` +
-      `chamadas_evitadas=${req ? ((100 * hits) / req).toFixed(1) : 0}% pii=${delta("comporta_pii_mascarados_total")} ` +
-      `uso_descartado=${delta("comporta_uso_descartados_total")}`,
+    `requests=${req} errors=${delta("comporta_erros_total")} cache_hits=${hits} ` +
+      `calls_avoided=${req ? ((100 * hits) / req).toFixed(1) : 0}% pii=${delta("comporta_pii_mascarados_total")} ` +
+      `usage_dropped=${delta("comporta_uso_descartados_total")}`,
   );
 }
