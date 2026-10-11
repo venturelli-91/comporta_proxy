@@ -133,8 +133,7 @@ func (s *Servidor) mutou(w http.ResponseWriter, r *http.Request, err error, stat
 		err = s.Recarregar(r.Context())
 	}
 	if err != nil {
-		s.d.Log.Error("admin", "erro", err.Error())
-		erro(w, http.StatusInternalServerError, "interno", "erro interno")
+		s.interno(w, err)
 		return
 	}
 	if v == nil {
@@ -144,10 +143,16 @@ func (s *Servidor) mutou(w http.ResponseWriter, r *http.Request, err error, stat
 	responderJSON(w, status, v)
 }
 
+// interno responde 500 sem detalhe; o erro de verdade fica só no log.
+func (s *Servidor) interno(w http.ResponseWriter, err error) {
+	s.d.Log.Error("admin", "erro", err.Error())
+	erro(w, http.StatusInternalServerError, "interno", "erro interno")
+}
+
 func (s *Servidor) listarClientes(w http.ResponseWriter, r *http.Request) {
 	lista, err := s.d.Banco.ListarClientes(r.Context())
 	if err != nil {
-		s.mutou(w, r, err, 0, nil)
+		s.interno(w, err)
 		return
 	}
 	responderJSON(w, http.StatusOK, lista)
@@ -184,7 +189,7 @@ func (s *Servidor) listarChaves(w http.ResponseWriter, r *http.Request) {
 	}
 	lista, err := s.d.Banco.ListarChaves(r.Context(), id)
 	if err != nil {
-		s.mutou(w, r, err, 0, nil)
+		s.interno(w, err)
 		return
 	}
 	responderJSON(w, http.StatusOK, lista)
@@ -228,7 +233,7 @@ func (s *Servidor) uso(w http.ResponseWriter, r *http.Request) {
 	cliente, _ := strconv.ParseInt(q.Get("cliente"), 10, 64)
 	rel, err := s.d.Banco.Relatorio(r.Context(), de, ate, cliente)
 	if err != nil {
-		s.mutou(w, r, err, 0, nil)
+		s.interno(w, err)
 		return
 	}
 	responderJSON(w, http.StatusOK, rel)
