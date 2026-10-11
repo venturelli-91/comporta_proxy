@@ -250,11 +250,18 @@ func responderJSON(w http.ResponseWriter, status int, v any) {
 }
 
 // painel serves the React build; unknown routes fall back to index.html (client-side routing).
+// index.html goes out with no-cache: it's the only build file without a hash and it points at the
+// hashed bundle, so a cached copy would keep loading the old bundle after a deploy. The embedded
+// files have no modification time, so without this the browser caches it heuristically.
 func painel(dist fs.FS) http.Handler {
 	arquivos := http.FileServerFS(dist)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		caminho := strings.TrimPrefix(r.URL.Path, "/")
-		if _, err := fs.Stat(dist, caminho); caminho != "" && err != nil {
+		_, err := fs.Stat(dist, caminho)
+		if caminho == "" || err != nil {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		if caminho != "" && err != nil {
 			http.ServeFileFS(w, r, dist, "index.html")
 			return
 		}
