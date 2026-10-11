@@ -3,7 +3,6 @@
 package httpapi
 
 import (
-	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -90,9 +89,7 @@ func Novo(d Deps) (*Servidor, error) {
 		d: d, limites: map[int64]*rate.Limiter{}, sombras: make(chan struct{}, 16),
 		emCurso: map[int64]int{}, porCliente: 32,
 		sessoes: map[string]time.Time{}, tentativas: map[string]*rate.Limiter{},
-		primeiroToken: cmp.Or(t.PrimeiroToken(), 30*time.Second),
-		entreChunks:   cmp.Or(t.EntreChunks(), 60*time.Second),
-		total:         cmp.Or(t.Total(), 10*time.Minute),
+		primeiroToken: t.PrimeiroToken(), entreChunks: t.EntreChunks(), total: t.Total(),
 	}
 	s.ctxSombras, s.pararSombras = context.WithCancel(context.Background())
 	ctx := context.Background()

@@ -98,7 +98,27 @@ func Carregar(caminho string) (*Config, error) {
 	if err := c.validar(); err != nil {
 		return nil, err
 	}
+	c.preencherPadroes()
 	return &c, nil
+}
+
+// preencherPadroes troca os zeros pelos padrões, num lugar só: quem usa a config recebe tudo
+// preenchido (antes, conexao_s ausente virava um dial sem prazo).
+func (c *Config) preencherPadroes() {
+	padrao := func(v *int, p int) {
+		if *v == 0 {
+			*v = p
+		}
+	}
+	t := &c.Timeouts
+	padrao(&t.ConexaoS, 5)
+	padrao(&t.PrimeiroTokenS, 30)
+	padrao(&t.EntreChunksS, 60)
+	padrao(&t.TotalS, 600)
+	padrao(&c.Cache.TTLs, 300)
+	if c.Cache.MaxMB == 0 {
+		c.Cache.MaxMB = 64
+	}
 }
 
 func (c *Config) validar() error {
@@ -108,6 +128,9 @@ func (c *Config) validar() error {
 	// Zero = usar o padrão; negativo faria os prazos vencerem na hora e toda requisição dar 504.
 	if t := c.Timeouts; min(t.ConexaoS, t.PrimeiroTokenS, t.EntreChunksS, t.TotalS) < 0 {
 		return fmt.Errorf("config: timeout negativo em \"timeouts\"")
+	}
+	if c.Cache.MaxMB < 0 || c.Cache.TTLs < 0 {
+		return fmt.Errorf("config: valor negativo em \"cache\"")
 	}
 	for alias, m := range c.Modelos {
 		if len(m.Destinos) == 0 {

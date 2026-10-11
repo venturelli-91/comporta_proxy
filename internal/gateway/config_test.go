@@ -43,3 +43,24 @@ func TestConfigDoRepositorio(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Zero significa "use o padrão": a config chega a quem usa já preenchida, num lugar só.
+// Sem isso, conexao_s ausente virava net.Dialer{Timeout: 0}, ou seja, sem prazo de conexão.
+func TestCarregarPreenchePadroes(t *testing.T) {
+	caminho := filepath.Join(t.TempDir(), "c.json")
+	json := `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}},"precos":{"m":{"saida":1}},"timeouts":{"total_s":42}}`
+	if err := os.WriteFile(caminho, []byte(json), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Carregar(caminho)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quer := TimeoutsCfg{ConexaoS: 5, PrimeiroTokenS: 30, EntreChunksS: 60, TotalS: 42} // o que veio no JSON é mantido
+	if c.Timeouts != quer {
+		t.Errorf("timeouts = %+v, queria %+v", c.Timeouts, quer)
+	}
+	if c.Cache != (CacheCfg{MaxMB: 64, TTLs: 300}) {
+		t.Errorf("cache = %+v, queria {MaxMB:64 TTLs:300}", c.Cache)
+	}
+}

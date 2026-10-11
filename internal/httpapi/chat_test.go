@@ -122,7 +122,8 @@ func novoCenario(t testing.TB) *cenario {
 			"pensa":    {Destinos: []gateway.Destino{{Provedor: "pensador", Modelo: "m1"}}, Concorrencia: 100},
 			"presa":    {Destinos: []gateway.Destino{{Provedor: "falso", Modelo: "m1"}}, Shadow: &gateway.Destino{Provedor: "mudo", Modelo: "m2"}, Concorrencia: 100},
 		},
-		Precos: map[string]gateway.PrecoCfg{"m1": {EntradaCacheMiss: 100, Saida: 1000}, "m2": {EntradaCacheMiss: 200, Saida: 2000}},
+		Precos:   map[string]gateway.PrecoCfg{"m1": {EntradaCacheMiss: 100, Saida: 1000}, "m2": {EntradaCacheMiss: 200, Saida: 2000}},
+		Timeouts: gateway.TimeoutsCfg{PrimeiroTokenS: 30, EntreChunksS: 60, TotalS: 600}, // sem Carregar, sem padrões
 	}
 	c.dbPath = filepath.Join(t.TempDir(), "teste.db")
 	b, err := armazenamento.Abrir(c.dbPath)
