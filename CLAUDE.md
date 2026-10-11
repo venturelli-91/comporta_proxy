@@ -1,220 +1,231 @@
-# CLAUDE.md — Comporta: gateway de LLM em Go
+# CLAUDE.md — Comporta: an LLM gateway in Go
 
-## Contexto
+## Context
 
-Projeto de portfólio do Aurélio para uma entrevista na Globo em 14/10/2026.
-A vaga é para um **proxy em Go, na GCP**, que está substituindo uma aplicação legada: ele recebe
-requisições de várias aplicações web de clientes e direciona buscas de dados nas clouds de forma
-mais eficiente.
+Aurélio's portfolio project for an interview at Globo on 2026-10-14. The portfolio is international:
+**everything committed to the repository is in English** (docs, comments, UI, commit messages).
+Talk to me in Portuguese in the chat.
 
-Eu venho de **TypeScript, React e Python** e estou aprendendo Go agora. O projeto existe para:
-1. **Eu aprender Go de verdade** e conseguir explicar cada decisão na entrevista.
-2. Ter um produto público, funcionando e com números medidos, que resolva um problema comercial real.
+The job is for a **Go proxy on GCP** that is replacing a legacy application: it receives requests from
+several client web applications and routes data lookups across clouds more efficiently.
 
-## O produto
+I come from **TypeScript, React and Python** and I'm learning Go now. The project exists so that:
+1. **I really learn Go** and can explain every decision in the interview.
+2. I have a public, working product with measured numbers that solves a real business problem.
 
-**Comporta** é um *gateway de LLM*: um proxy que fica entre as aplicações de uma empresa e os
-provedores de IA (DeepSeek primeiro, depois qualquer API compatível com OpenAI).
+## The product
 
-**Problema comercial:** empresas que colocam IA nos produtos perdem o controle rápido. A chave da API
-fica espalhada em vários apps, ninguém sabe quanto cada time gasta, a mesma pergunta é paga
-várias vezes, um app com bug consome o orçamento do mês e, quando o provedor cai, tudo cai junto.
-Ferramentas como LiteLLM, Portkey, Helicone e Cloudflare AI Gateway existem justamente por isso.
+**Comporta** is an *LLM gateway*: a proxy that sits between a company's applications and AI providers
+(DeepSeek first, then any OpenAI-compatible API).
 
-**O que a Comporta faz:**
-- Cada aplicação cliente recebe a **sua própria chave** (`ck_...`); a chave real do provedor fica só no servidor.
-- **Rate limit e orçamento por cliente** (requisições/minuto e limite de gasto em US$ por mês).
-- **Cache** de respostas idênticas + **singleflight** (pedidos iguais simultâneos viram uma única chamada).
-- **Timeout, retry com backoff e circuit breaker** por provedor; **fallback** para outro modelo/provedor.
-- **Streaming** (SSE) repassado ao cliente token a token.
-- **Registro de uso**: tokens, custo estimado, latência, cache hit, por cliente e por modelo.
-- **Modo shadow**: manda a mesma requisição para um segundo modelo, devolve só a do principal e
-  registra a comparação (custo, latência, tamanho da resposta). Serve para migrar de modelo/provedor
-  sem risco, que é o mesmo problema de "modernizar um legado".
-- **Proteção de dados pessoais (LGPD)**: antes de enviar ao provedor, detecta e mascara CPF, CNPJ,
-  e-mail, telefone com DDD e cartão (`"meu CPF é 123.456.789-09"` → `"meu CPF é [CPF_1]"`), e restaura
-  os valores originais na resposta. Ligado/desligado por cliente. Importa ainda mais com provedores
-  hospedados fora do Brasil, como a DeepSeek.
-- **Painel React**: clientes, chaves, uso, custo, cache hit rate, latência p95, quantos dados pessoais
-  foram mascarados, e um playground.
+**Business problem:** companies that put AI into their products quickly lose control. The API key is spread
+across several apps, nobody knows how much each team spends, the same question is paid for many times, one
+buggy app burns the month's budget and, when the provider goes down, everything goes down with it.
+Tools like LiteLLM, Portkey, Helicone and Cloudflare AI Gateway exist precisely for this.
 
-**Paralelo com a vaga:** proxy em Go recebendo requisições de várias aplicações clientes,
-roteando para backends externos de forma eficiente (cache, deduplicação, conexões reaproveitadas,
-timeouts), com migração segura via shadow. É o mesmo tipo de problema, num domínio fácil de demonstrar.
+**What Comporta does:**
+- Each client application gets **its own key** (`ck_...`); the real provider key stays only on the server.
+- **Per-client rate limit and budget** (requests/minute and a US$ spend limit per month).
+- **Cache** of identical responses + **singleflight** (identical concurrent requests become a single call).
+- **Timeout, retry with backoff and circuit breaker** per provider; **fallback** to another model/provider.
+- **Streaming** (SSE) relayed to the client token by token.
+- **Usage records**: tokens, estimated cost, latency, cache hit, per client and per model.
+- **Shadow mode**: sends the same request to a second model, returns only the primary's answer and records
+  the comparison (cost, latency, response size). It lets you migrate model/provider without risk, which is
+  the same problem as "modernizing a legacy system".
+- **Personal data protection (LGPD, Brazil's data protection law)**: before sending to the provider, detects
+  and masks CPF, CNPJ, email, phone numbers with area code and cards (`"meu CPF é 123.456.789-09"` →
+  `"meu CPF é [CPF_1]"`), and restores the original values in the response. On/off per client. It matters
+  even more with providers hosted outside Brazil, such as DeepSeek.
+- **React dashboard**: clients, keys, usage, cost, cache hit rate, p95 latency, how much personal data was
+  masked, and a playground.
 
-> **Arquitetura detalhada e decisões técnicas: `docs/ARQUITETURA.md`. Leia antes de implementar
-> qualquer parte do caminho da requisição, e atualize o documento quando uma decisão mudar.**
+**Parallel with the job:** a Go proxy receiving requests from several client applications, routing to
+external backends efficiently (cache, deduplication, reused connections, timeouts), with safe migration via
+shadow. It's the same kind of problem, in a domain that is easy to demo.
+
+> **Detailed architecture and technical decisions: `docs/ARCHITECTURE.md`. Read it before implementing any
+> part of the request path, and update it when a decision changes.**
 
 ## Stack
 
-- **Back-end:** Go 1.24+, preferindo a biblioteca padrão (`net/http` com roteamento do 1.22,
-  `log/slog`, `encoding/json`). Dependências permitidas: `golang.org/x/time/rate`,
-  `golang.org/x/sync` (singleflight, errgroup), `github.com/sony/gobreaker/v2`, driver de banco.
-  Qualquer outra: me pergunte antes.
-- **Banco:** SQLite sem cgo (`modernc.org/sqlite`) no início; interface `Repositorio` para trocar
-  por Postgres depois.
-- **Front-end:** React + TypeScript + Vite em `web/`, TanStack Query, Recharts, Tailwind + shadcn/ui.
-  O build é embutido no binário Go com `//go:embed` (um único artefato de deploy).
-- **LLM:** DeepSeek pela API compatível com OpenAI (em 09/10/2026: `deepseek-flash` e
-  `deepseek-v4-pro`, raciocínio ligado por padrão, preço menor fora do horário de pico).
-  Modelos, preços e janelas de pico vêm de configuração; nunca fixos no código.
-- **Testes de carga:** k6 em `carga/`, **sempre contra o provedor falso** (para não gastar dinheiro).
-- **Infra:** Docker multi-stage + docker compose. Deploy futuro: Cloud Run (GCP), por ser o ambiente da vaga.
+- **Back end:** Go 1.24+, preferring the standard library (`net/http` with 1.22 routing, `log/slog`,
+  `encoding/json`). Allowed dependencies: `golang.org/x/time/rate`, `golang.org/x/sync` (singleflight,
+  errgroup), `github.com/sony/gobreaker/v2`, a database driver. Anything else: ask me first.
+- **Database:** cgo-free SQLite (`modernc.org/sqlite`); a repository interface only when Postgres arrives.
+- **Front end:** React + TypeScript + Vite in `web/`, TanStack Query, Recharts, Tailwind.
+  The build is embedded in the Go binary with `//go:embed` (a single deploy artifact).
+- **LLM:** DeepSeek through its OpenAI-compatible API (as of 2026-10-09: `deepseek-flash` and
+  `deepseek-v4-pro`, reasoning on by default, cheaper off-peak). Models, prices and peak windows come from
+  configuration; never hard-coded.
+- **Load tests:** k6 in `carga/`, **always against the fake provider** (so no money is spent).
+- **Infra:** multi-stage Docker + docker compose. Future deploy: Cloud Run (GCP), since it's the job's environment.
 
-## Arquitetura
+## Architecture
 
 ```
-apps clientes ──(chave ck_...)──▶ Comporta (Go)
-                                   ├─ middleware: auth → rate limit → orçamento → log/métricas
-                                   ├─ mascarador LGPD (ida) / restaurador (volta)
-                                   ├─ cache (memória, TTL) + singleflight
-                                   ├─ roteador de modelos (principal, fallback, shadow)
-                                   ├─ provedores: DeepSeek | OpenAI-compatível | Falso (testes)
-                                   │     cada um com timeout, retry e circuit breaker
-                                   └─ registro de uso (SQLite, gravado em lote)
-painel React ──▶ /admin/* (API do painel, protegida por senha/token de admin)
+client apps ──(key ck_...)──▶ Comporta (Go)
+                               ├─ middleware: auth → rate limit → budget → log/metrics
+                               ├─ LGPD masker (outbound) / restorer (inbound)
+                               ├─ cache (memory, TTL) + singleflight
+                               ├─ model router (primary, fallback, shadow)
+                               ├─ providers: DeepSeek | OpenAI-compatible | Fake (tests)
+                               │     each with timeout, retry and circuit breaker
+                               └─ usage records (SQLite, batched writes)
+React dashboard ──▶ /admin/* (dashboard API, protected by an admin token/session)
 ```
 
-## Estrutura de pastas
+## Folder structure
+
+Go identifiers and package names are still in Portuguese (translation phase 2, after the interview; see
+`.claude/docs/backlog.md`).
 
 ```
-cmd/comporta/          main mínimo: config por ambiente, liga dependências, graceful shutdown
-internal/gateway/      domínio: Cliente, Requisicao, Uso, regras de orçamento, erros
-internal/provedor/     interface Provedor + implementações (deepseek, openaicompat, falso)
-internal/cache/        cache TTL + singleflight
-internal/lgpd/         detecção e mascaramento de dados pessoais brasileiros (com validação de dígitos)
-internal/resiliencia/  retry com backoff/jitter, circuit breaker
-internal/armazenamento/ repositório SQLite (clientes, chaves com hash, uso)
-internal/httpapi/      rotas públicas (/v1/...) e de admin (/admin/...), middlewares, SSE
-web/                   painel React
-carga/                 scripts k6
+cmd/comporta/           minimal main: config from env, wires dependencies, graceful shutdown
+internal/gateway/       domain: config, cost, router
+internal/provedor/      provider: OpenAI-compatible client + fake provider
+internal/cache/         TTL cache
+internal/lgpd/          detection and masking of Brazilian personal data (with check-digit validation)
+internal/resiliencia/   resilience: retry with backoff/jitter
+internal/armazenamento/ storage: SQLite (clients, hashed keys, usage)
+internal/httpapi/       public routes (/v1/...) and admin routes (/admin/...), middlewares, SSE
+web/                    React dashboard
+carga/                  k6 scripts (load tests)
 ```
 
 ## API
 
-- `POST /v1/chat/completions` — **compatível com o formato OpenAI** (assim qualquer SDK existente
-  funciona só trocando a base URL). Suporta `stream: true`.
-- `GET  /v1/models` — modelos liberados para aquele cliente.
+- `POST /v1/chat/completions` — **compatible with the OpenAI format** (so any existing SDK works by changing
+  only the base URL). Supports `stream: true`.
+- `GET  /v1/models` — models allowed for that client.
 - `GET  /healthz`, `GET /readyz`, `GET /metrics`.
-- `/admin/clientes` (CRUD), `/admin/clientes/{id}/chaves` (gerar/revogar), `/admin/uso?de=&ate=&cliente=`.
+- `/admin/clientes` (CRUD), `/admin/clientes/{id}/chaves` (create/revoke keys), `/admin/uso?de=&ate=&cliente=` (usage).
 
-Erros sempre no formato `{"erro": {"codigo": "...", "mensagem": "..."}}`, com status correto:
-401 (chave inválida), 429 (rate limit, com `Retry-After`), 402 (orçamento esgotado),
-502/503/504 (provedor com problema), 500 (interno, sem detalhes).
+Errors always in the format `{"erro": {"codigo": "...", "mensagem": "..."}}` (field names stay in Portuguese
+until phase 2, since they are API contract; the `mensagem` text is in English), with the right status:
+401 (invalid key), 429 (rate limit, with `Retry-After`), 402 (budget exhausted),
+502/503/504 (provider trouble), 500 (internal, no details).
 
-## Comandos
+## Commands
 
 ```bash
-go run ./cmd/comporta                 # API em :8080 (usa o provedor falso se DEEPSEEK_API_KEY não existir)
+go run ./cmd/comporta                 # API on :8080 (uses the fake provider if DEEPSEEK_API_KEY is not set)
 go vet ./...
-go test -race ./...                   # SEMPRE com -race
-cd web && npm run dev                 # painel em :5173
-k6 run carga/carga.js                 # contra o provedor falso
+go test -race ./...                   # ALWAYS with -race
+cd web && npm run dev                 # dashboard on :5173
+k6 run carga/carga.js                 # against the fake provider
 docker compose up
 ```
 
-Variáveis: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_PATH`, `TRUST_PROXY` (=1 atrás de proxy confiável; no Cloud Run o `K_SERVICE` já basta), `DEMO_CHAVE` (só na demo pública: cria o cliente demo com essa chave quando o banco está vazio).
+Variables: `PORT`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `ADMIN_TOKEN`, `DB_PATH`, `TRUST_PROXY` (=1 behind
+a trusted proxy; on Cloud Run `K_SERVICE` is enough), `DEMO_CHAVE` (public demo only: creates the demo client
+with this key when the database is empty).
 
-## Regras de segurança (não negociáveis)
+## Security rules (non-negotiable)
 
-- A `DEEPSEEK_API_KEY` **nunca** vai para o front, para logs ou para o repositório. `.env` no `.gitignore`.
-- Chaves de cliente guardadas só como **hash** (SHA-256); a chave inteira aparece uma única vez, na criação.
-- Comparação de chaves/tokens com `crypto/subtle.ConstantTimeCompare`.
-- Não logar o conteúdo das mensagens dos usuários por padrão (só tamanho, tokens, modelo). Tratar como dado pessoal (LGPD).
-- Limite de tamanho do corpo da requisição.
-- O mapa `[CPF_1] → valor real` vive só na memória da requisição; nunca é gravado em log, cache ou banco.
-- Mascaramento acontece **antes** do cache: a chave de cache nunca contém dado pessoal.
+- The `DEEPSEEK_API_KEY` **never** goes to the front end, to logs or to the repository. `.env` is in `.gitignore`.
+- Client keys stored only as a **hash** (SHA-256); the full key appears exactly once, at creation.
+- Key/token comparison with `crypto/subtle.ConstantTimeCompare`.
+- Don't log the content of user messages by default (only size, tokens, model). Treat it as personal data (LGPD).
+- Request body size limit.
+- The `[CPF_1] → real value` map lives only in the request's memory; it is never written to logs, cache or database.
+- Masking happens **before** the cache: the cache key never contains personal data.
 
-## Mascaramento LGPD: regras
+## LGPD masking: rules
 
-- CPF e CNPJ só contam como detectados se o **dígito verificador for válido** (evita mascarar
-  números aleatórios). Aceitar com e sem pontuação.
-- Telefone brasileiro com DDD (fixo e celular, com e sem +55), e-mail e cartão (com checagem de Luhn).
-- O mesmo valor recebe sempre o mesmo marcador na mesma requisição (`[CPF_1]` aparece duas vezes
-  se o CPF aparecer duas vezes), para o modelo manter a coerência.
-- Restauração na resposta, inclusive no **streaming**: um marcador pode chegar quebrado entre dois
-  pedaços (`[CP` + `F_1]`), então o restaurador precisa de um pequeno buffer.
-- Testes table-driven com muitos casos reais e falsos positivos, mais um **fuzz test** garantindo
-  que mascarar e restaurar devolve o texto original.
-- Limitação honesta para o README: detecção por padrão não pega tudo (nomes, endereços). É uma
-  camada de redução de risco, não garantia de conformidade.
+- CPF and CNPJ only count as detected if the **check digit is valid** (avoids masking random numbers).
+  Accept them with and without punctuation.
+- Brazilian phone numbers with area code (landline and mobile, with and without +55), email and cards
+  (with a Luhn check).
+- The same value always gets the same placeholder within a request (`[CPF_1]` appears twice if the CPF
+  appears twice), so the model stays coherent.
+- Restoration in the response, including in **streaming**: a placeholder can arrive split across two chunks
+  (`[CP` + `F_1]`), so the restorer needs a small buffer.
+- Table-driven tests with many real cases and false positives, plus a **fuzz test** guaranteeing that
+  masking then restoring returns the original text.
+- Honest limitation for the README: pattern detection doesn't catch everything (names, addresses). It's a
+  risk-reduction layer, not a compliance guarantee.
 
-## Convenções de Go
+## Go conventions
 
-- `gofmt`; nada de imports ou variáveis não usados.
-- Erros como valor: `fmt.Errorf("contexto: %w", err)`, `errors.Is`/`errors.As`, sem panic para erro esperado.
-- Interfaces pequenas, definidas no pacote que as usa ("aceite interfaces, devolva structs").
-- `context.Context` como primeiro parâmetro em tudo que faz I/O, e repassado adiante
-  (se o cliente desconectar, a chamada ao provedor é cancelada).
-- Um `http.Client` reaproveitado por provedor, com timeout; sempre fechar `resp.Body`.
-- Estado compartilhado com mutex/atomic e coberto por teste concorrente com `-race`.
-- Testes table-driven com `t.Run`; handlers com `httptest`; o provedor real é testado contra um
-  `httptest.NewServer` que imita a API, nunca contra a API de verdade nos testes.
-- Logs estruturados com `slog`.
+- `gofmt`; no unused imports or variables.
+- Errors as values: `fmt.Errorf("context: %w", err)`, `errors.Is`/`errors.As`, no panic for expected errors.
+- Small interfaces, defined in the package that uses them ("accept interfaces, return structs").
+- `context.Context` as the first parameter of everything that does I/O, and passed along
+  (if the client disconnects, the provider call is cancelled).
+- One reused `http.Client` per provider, with timeouts; always close `resp.Body`.
+- Shared state with mutex/atomic and covered by a concurrent test with `-race`.
+- Table-driven tests with `t.Run`; handlers with `httptest`; the real provider is tested against an
+  `httptest.NewServer` that mimics the API, never against the real API in tests.
+- Structured logs with `slog`.
 
-## Como você deve trabalhar comigo (modo aprendizado)
+## How you should work with me (learning mode)
 
-- **Explique antes de escrever**: 2–3 frases sobre o que vai fazer e por quê, comparando com
-  TypeScript/Node quando ajudar.
-- **Me deixe escrever partes.** Quando a tarefa for um bom exercício (middleware, table-driven test,
-  circuit breaker, singleflight), proponha a assinatura e os testes e me peça para implementar.
-  Depois revise como num code review.
-- Comentários no código em português, explicando o "porquê".
-- Aponte quando algo funciona mas não é idiomático em Go.
-- Ao fim de cada tarefa, sugira **uma pergunta de entrevista** sobre o que acabamos de fazer.
-- Passos pequenos, um commit por passo, mensagens claras em português.
-- Não invente como a Globo faz as coisas internamente. Só cite o que é público.
+- **Explain before writing**: 2–3 sentences on what you'll do and why, comparing with TypeScript/Node when it helps.
+- **Let me write parts.** When the task is a good exercise (middleware, table-driven test, circuit breaker,
+  singleflight), propose the signature and the tests and ask me to implement it. Then review it like a code review.
+- Code comments in English, explaining the "why".
+- Point out when something works but isn't idiomatic Go.
+- At the end of each task, suggest **one interview question** about what we just did.
+- Small steps, one commit per step, clear messages in English.
+- Don't make up how Globo does things internally. Only cite what is public.
 
 ## Roadmap
 
-**MVP até 13/10 — feito em 09/10 (branch `feat/mvp`), um commit por feature:**
-- [x] Provedor falso (latência e falhas configuráveis) + cliente compatível com OpenAI (DeepSeek)
-- [x] `POST /v1/chat/completions` compatível com OpenAI, sem e com streaming
-- [x] Chaves por cliente (hash no SQLite) + middleware de autenticação
-- [x] Rate limit por cliente (token bucket)
-- [x] Cache TTL + singleflight, com teste provando 1 chamada para N pedidos iguais simultâneos
-- [x] Timeout + retry com backoff/jitter + circuit breaker no provedor
-- [x] Registro de uso (tokens, custo estimado, latência, cache hit), gravado em lote
-- [x] Painel React: uso por cliente, cache, custo, latência p95, shadow, playground
-- [x] k6 contra o provedor falso: números no README
-- [x] README de portfólio com screenshot, arquitetura, decisões e números
-- [x] Mascaramento LGPD com table-driven + fuzz test, **inclusive no streaming**
-- [x] Orçamento mensal por cliente (402), fallback entre destinos e modo shadow com comparação
+**MVP by 10/13 — done on 10/09 (branch `feat/mvp`), one commit per feature:**
+- [x] Fake provider (configurable latency and failures) + OpenAI-compatible client (DeepSeek)
+- [x] OpenAI-compatible `POST /v1/chat/completions`, with and without streaming
+- [x] Per-client keys (hashed in SQLite) + authentication middleware
+- [x] Per-client rate limit (token bucket)
+- [x] TTL cache + singleflight, with a test proving 1 call for N identical concurrent requests
+- [x] Timeout + retry with backoff/jitter + circuit breaker on the provider
+- [x] Usage records (tokens, estimated cost, latency, cache hit), written in batches
+- [x] React dashboard: usage per client, cache, cost, p95 latency, shadow, playground
+- [x] k6 against the fake provider: numbers in the README
+- [x] Portfolio README with screenshot, architecture, decisions and numbers
+- [x] LGPD masking with table-driven + fuzz tests, **including streaming**
+- [x] Monthly budget per client (402), fallback between destinations and shadow mode with comparison
 
-**Depois da entrevista:** ver `.claude/docs/backlog.md` (inclui a dívida deliberada `ponytail:`).
-- [ ] Métricas Prometheus com labels + tracing OpenTelemetry
-- [ ] Postgres + Redis (cache, rate limit e orçamento compartilhados entre várias instâncias)
-- [ ] Deploy no Cloud Run com Secret Manager
-- [ ] Rate limit por tokens estimados, alertas de orçamento, cache semântico (com medição)
+**After the interview:** see `.claude/docs/backlog.md` (includes the deliberate `ponytail:` debt).
+- [ ] Translation phase 2: Go identifiers, package names, `comporta.json` keys, JSON fields and API error codes
+- [ ] Prometheus metrics with labels + OpenTelemetry tracing
+- [ ] Postgres + Redis (cache, rate limit and budget shared across instances)
+- [ ] Cloud Run deploy with Secret Manager
+- [ ] Rate limit by estimated tokens, budget alerts, semantic cache (with measurement)
 
-## Decisões (registre aqui as novas, com o porquê)
+## Decisions (record new ones here, with the why)
 
-- **API compatível com OpenAI:** adoção sem atrito; o cliente só troca a base URL.
-- **Provedor falso desde o início:** testes e carga sem custo, sem rede e determinísticos.
-- **Cache exato e opt-in** (header `X-Comporta-Cache` ou política do cliente): com raciocínio
-  ligado por padrão, `temperature` não torna a resposta determinística, então reaproveitar
-  precisa ser decisão explícita. O cache de prefixo da DeepSeek é preservado e medido.
-- **Retry e fallback só antes do primeiro byte** enviado ao cliente.
-- **Semáforo de concorrência por modelo** abaixo do limite da conta DeepSeek.
-- **Uso gravado em lote:** não pôr uma escrita no banco no caminho crítico de cada requisição.
-- **Mascarar antes de cachear:** o cache e os logs nunca veem dado pessoal.
-- **Validar dígito verificador de CPF/CNPJ:** menos falsos positivos do que regex pura.
-- **Um cliente HTTP compatível com OpenAI, sem interface `Provedor`:** DeepSeek e "openaicompat" diferem
-  só na base_url; o falso é um `http.Handler` do mesmo protocolo e exercita o código de rede real.
-- **Sem interface `Repositorio`:** uma implementação só (SQLite). A interface nasce no consumidor
-  quando o Postgres chegar.
-- **Retry dentro do circuit breaker; 4xx do cliente não abre o breaker; cancelamento é excluído.**
-- **Marcador LGPD nunca colide com texto do usuário** (`[CPF_1]` literal → o CPF real vira `[CPF_2]`):
-  garante `Restaurar(Mascarar(s)) == s`, provado por fuzz.
-- **Shadow só no caminho sem cache:** comparar uma resposta reaproveitada não mede nada e paga uma chamada.
-- **Singleflight com `context.WithoutCancel`:** o líder desconectar não derruba quem espera a mesma resposta.
-- **Cookie do admin é uma sessão aleatória** (o servidor guarda só o hash, logout revoga), `HttpOnly; SameSite=Strict`; token comparado em tempo constante.
-- **Login limitado por IP, consumido na entrada:** `Allow()` confere e gasta num passo só (sem corrida entre tentativas paralelas).
-- **XFF só atrás de proxy confiável** (`K_SERVICE`/`TRUST_PROXY=1`): sem proxy o cabeçalho é do cliente e daria um balde novo a cada tentativa.
-- **Demo pública na Render, não no Cloud Run:** plano gratuito sem cartão; o Cloud Run exige billing. Demo usa só o provedor falso, com token e chave públicos (instância descartável, disco efêmero recriado pelo `DEMO_CHAVE`).
-- **Commits em português (Conventional Commits)** neste repositório, prevalecendo sobre a regra global.
+- **OpenAI-compatible API:** frictionless adoption; the client only changes the base URL.
+- **Fake provider from day one:** tests and load without cost, without network and deterministic.
+- **Exact, opt-in cache** (`X-Comporta-Cache` header or the client's policy): with reasoning on by default,
+  `temperature` doesn't make the response deterministic, so reusing it has to be an explicit decision.
+  DeepSeek's prefix cache is preserved and measured.
+- **Retry and fallback only before the first byte** is sent to the client.
+- **Per-model concurrency semaphore** below the DeepSeek account limit.
+- **Usage written in batches:** no database write on the critical path of each request.
+- **Mask before caching:** the cache and the logs never see personal data.
+- **Validate the CPF/CNPJ check digit:** fewer false positives than a plain regex.
+- **One OpenAI-compatible HTTP client, no `Provider` interface:** DeepSeek and "openaicompat" differ only in
+  base_url; the fake is an `http.Handler` speaking the same protocol and exercises the real network code.
+- **No `Repository` interface:** a single implementation (SQLite). The interface is born in the consumer
+  when Postgres arrives.
+- **Retry inside the circuit breaker; client 4xx doesn't open the breaker; cancellation is excluded.**
+- **An LGPD placeholder never collides with user text** (a literal `[CPF_1]` → the real CPF becomes `[CPF_2]`):
+  guarantees `Restore(Mask(s)) == s`, proven by fuzzing.
+- **Shadow only on the uncached path:** comparing a reused response measures nothing and pays for a call.
+- **Singleflight with `context.WithoutCancel`:** the leader disconnecting doesn't bring down whoever is waiting for the same response.
+- **The admin cookie is a random session** (the server keeps only the hash, logout revokes it), `HttpOnly; SameSite=Strict`; the token is compared in constant time.
+- **Login limited per IP, consumed on entry:** `Allow()` checks and spends in a single step (no race between parallel attempts).
+- **XFF only behind a trusted proxy** (`K_SERVICE`/`TRUST_PROXY=1`): without a proxy the header belongs to the client and would give it a fresh bucket on every attempt.
+- **Public demo on Render, not Cloud Run:** free tier without a card; Cloud Run requires billing. The demo uses only the fake provider, with a public token and key (disposable instance, ephemeral disk recreated by `DEMO_CHAVE`).
+- **Config defaults filled in one place (`Carregar`):** whoever uses the config gets it complete; hand-built configs in tests declare their timeouts explicitly.
+- **Budget is a soft cap; shadow cost stays outside the client's budget:** see `docs/ARCHITECTURE.md` §8.
+- **Everything in the repository is in English** (international portfolio): docs, comments, UI and
+  Conventional Commits in English. Identifiers follow in phase 2. This overrides the earlier Portuguese rule.
 
-## Pitch de 30 segundos para a entrevista
+## 30-second interview pitch
+
+The interview at Globo is in Portuguese, so the pitch I'll say is kept in Portuguese, with the English version below.
 
 "Construí em Go um gateway que deixa empresas brasileiras usarem IA sem vazar dado pessoal e com
 custo sob controle. Ele mascara CPF, e-mail e telefone antes de enviar ao provedor e restaura na
@@ -224,3 +235,12 @@ modelo comparando os dois sem afetar o usuário. Medi com k6: 1.000 req/s com p9
 um provedor de 60 ms (1,7 ms de overhead), o cache evitou 99,9% das chamadas pagas num cenário repetitivo, e
 com o provedor falhando metade das vezes 98,4% das requisições terminaram bem. É o mesmo tipo de problema de um proxy que atende várias
 aplicações clientes e precisa buscar dados externos de forma eficiente."
+
+"I built a Go gateway that lets Brazilian companies use AI without leaking personal data and with costs
+under control. It masks CPF, email and phone numbers before sending to the provider and restores them on the
+way back. Each application has its own key, limit and budget; identical requests are cached and deduplicated
+with singleflight; the provider is protected by timeouts, retries and a circuit breaker; and a shadow mode
+lets you migrate models by comparing both without affecting the user. I measured it with k6: 1,000 req/s with
+a p95 of 61.7 ms against a 60 ms provider (1.7 ms of overhead), the cache avoided 99.9% of paid calls in a
+repetitive scenario, and with the provider failing half the time 98.4% of requests succeeded. It's the same
+kind of problem as a proxy serving many client applications that needs to fetch external data efficiently."
