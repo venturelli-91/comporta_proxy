@@ -158,6 +158,12 @@ func (s *Servidor) Handler() http.Handler {
 	mux.HandleFunc("GET /readyz", s.pronto)
 	mux.HandleFunc("GET /metrics", s.metricas)
 	s.rotasAdmin(mux)
+	// Mais específicos que "/": rota errada da API responde 404 JSON, não o index.html do painel.
+	naoExiste := func(w http.ResponseWriter, r *http.Request) {
+		erro(w, http.StatusNotFound, "rota_inexistente", "rota inexistente")
+	}
+	mux.HandleFunc("/v1/", naoExiste)
+	mux.HandleFunc("/admin/", naoExiste)
 	if s.d.Painel != nil {
 		mux.Handle("/", painel(s.d.Painel))
 	}
