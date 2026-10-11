@@ -37,7 +37,7 @@ existing SDK works.
 ## Life of a request
 
 ```mermaid
-flowchart LR
+flowchart TD
     App[Client app] -- "ck_ key" --> Auth["Auth<br/>SHA-256 of the key"]
     Auth --> Adm["Admission<br/>rate limit · budget"]
     Adm -. "rejects: 429 / 402" .-> App
