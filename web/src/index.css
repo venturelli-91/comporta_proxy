@@ -1,57 +1,60 @@
 @import "tailwindcss";
+@import "@fontsource-variable/schibsted-grotesk";
+@import "@fontsource-variable/jetbrains-mono";
 
-/* Tokens from .claude/docs/design/dashboard.md. Water: teal over cool grey-green.
+/* Tokens from .claude/docs/design/dashboard.md. Engineering instrument: neutrals with no hue, near-black ink,
+   hairline rules instead of shadows, one deep teal for action and normal state.
    Theme: follows the system by default; data-tema="claro"|"escuro" on <html> (the user's choice) wins. */
 :root {
-  --fundo: #f3f5f4;
-  --lateral: #e9eeec; /* second neutral layer: navigation */
-  --superficie: #ffffff;
-  --realce: #f7f9f8; /* hover for rows and items */
-  --texto: #14201d;
-  --suave: #56655f;
-  --borda: #dbe2df;
-  --acento: #0f766e;
-  --acento-claro: #99d5cc;
-  --sobre-acento: #ffffff; /* text on top of the teal button */
-  --alerta: #a14a07;
-  --erro: #b91c1c;
-  --sombra: 0 1px 2px rgb(20 32 29 / 0.06), 0 1px 1px rgb(20 32 29 / 0.04);
+  --fundo: oklch(0.985 0 0);
+  --lateral: oklch(0.955 0.002 180); /* second neutral layer: navigation */
+  --superficie: oklch(1 0 0);
+  --realce: oklch(0.965 0.002 180); /* hover for rows and items */
+  --texto: oklch(0.2 0.005 180);
+  --suave: oklch(0.47 0.006 180);
+  --borda: oklch(0.9 0.003 180);
+  --acento: oklch(0.47 0.1 185);
+  --acento-claro: oklch(0.8 0.07 185);
+  --sobre-acento: oklch(1 0 0); /* text on top of the teal button */
+  --alerta: oklch(0.52 0.13 60);
+  --erro: oklch(0.53 0.19 27);
+  --sombra: none;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"]) {
-    --fundo: #0f1513;
-    --lateral: #0b100f;
-    --superficie: #17201d;
-    --realce: #1c2723;
-    --texto: #e4ebe8;
-    --suave: #9aaba5;
-    --borda: #26332f;
-    --acento: #2dd4bf;
-    --acento-claro: #1d5c55;
-    --sobre-acento: #0f1513;
-    --alerta: #f59e0b;
-    --erro: #f87171;
-    --sombra: 0 1px 2px rgb(0 0 0 / 0.4);
+    --fundo: oklch(0.17 0.003 180);
+    --lateral: oklch(0.145 0.003 180);
+    --superficie: oklch(0.2 0.004 180);
+    --realce: oklch(0.23 0.004 180);
+    --texto: oklch(0.94 0.003 180);
+    --suave: oklch(0.72 0.006 180);
+    --borda: oklch(0.3 0.004 180);
+    --acento: oklch(0.78 0.12 180);
+    --acento-claro: oklch(0.45 0.07 185);
+    --sobre-acento: oklch(0.17 0.003 180);
+    --alerta: oklch(0.8 0.15 75);
+    --erro: oklch(0.72 0.17 25);
+    --sombra: none;
     color-scheme: dark;
   }
 }
 
 :root[data-tema="escuro"] {
-  --fundo: #0f1513;
-  --lateral: #0b100f;
-  --superficie: #17201d;
-  --realce: #1c2723;
-  --texto: #e4ebe8;
-  --suave: #9aaba5;
-  --borda: #26332f;
-  --acento: #2dd4bf;
-  --acento-claro: #1d5c55;
-  --sobre-acento: #0f1513;
-  --alerta: #f59e0b;
-  --erro: #f87171;
-  --sombra: 0 1px 2px rgb(0 0 0 / 0.4);
+  --fundo: oklch(0.17 0.003 180);
+  --lateral: oklch(0.145 0.003 180);
+  --superficie: oklch(0.2 0.004 180);
+  --realce: oklch(0.23 0.004 180);
+  --texto: oklch(0.94 0.003 180);
+  --suave: oklch(0.72 0.006 180);
+  --borda: oklch(0.3 0.004 180);
+  --acento: oklch(0.78 0.12 180);
+  --acento-claro: oklch(0.45 0.07 185);
+  --sobre-acento: oklch(0.17 0.003 180);
+  --alerta: oklch(0.8 0.15 75);
+  --erro: oklch(0.72 0.17 25);
+  --sombra: none;
   color-scheme: dark;
 }
 
@@ -70,6 +73,13 @@
   --color-erro: var(--erro);
   --shadow-cartao: var(--sombra);
   --animate-pulso: pulso 1.4s ease-in-out infinite;
+  --font-sans: "Schibsted Grotesk Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, Consolas, monospace;
+  --ease-saida: cubic-bezier(0.25, 1, 0.5, 1);
+  /* Instrument corners: square enough to read as a panel, not as an app-store tile. */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
 }
 
 @keyframes pulso {
@@ -105,14 +115,14 @@ textarea {
     color 150ms ease-out,
     background-color 150ms ease-out,
     border-color 150ms ease-out,
-    box-shadow 150ms ease-out;
+    box-shadow 150ms ease-out,
+    opacity 150ms ease-out;
 }
 
 body {
   background: var(--fundo);
   color: var(--texto);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -120,6 +130,14 @@ h1,
 h2,
 h3 {
   text-wrap: balance;
+}
+
+/* Aligned figures only where numbers are compared: in this face tnum also widens ":" and ";" in prose. */
+td,
+th,
+dd,
+data {
+  font-variant-numeric: tabular-nums;
 }
 
 ::placeholder {

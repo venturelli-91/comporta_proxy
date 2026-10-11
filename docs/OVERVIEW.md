@@ -32,7 +32,7 @@ existing SDK works.
 | Cache + singleflight | An opt-in exact cache, and identical requests that arrive at the same time become a single paid call. |
 | Resilience | Per-model concurrency limit, retry with backoff and jitter, a circuit breaker per client and destination, and fallback to the next model, all before the first byte reaches the client. |
 | Shadow mode | Sends the same request to a second model in the background and compares latency, cost and size, so you can migrate models without risk to users. |
-| Usage and cost | Tokens, cost in micro-dollars, latency and cache hits per client and per model, in a React dashboard embedded in the same binary. |
+| Usage and cost | Tokens, cost in micro-dollars, latency and cache hits per client and per model, in a React dashboard embedded in the same binary, with four screens: **Overview** (spend, cache savings, p95, error rate, personal data protected, per client and per provider), **Clients and keys**, **Migration (shadow)** and **Playground**. |
 
 ## Life of a request
 
@@ -80,6 +80,9 @@ is never written to logs, cache or the database. In a stream, a placeholder can 
 chunks, so the restorer holds back the partial piece until it can be replaced. A fuzz test checks that
 masking and then restoring always returns the original text.
 
+To see it working, open the **Playground** in the live demo: it shows side by side what the provider received,
+with placeholders like `[CPF_1]` highlighted, and the answer that came back with the real values restored.
+
 ## Measured, not estimated
 
 Load tests with k6 at 1,000 requests per second for 30 seconds, against a fake provider that always takes
@@ -88,7 +91,7 @@ exercise the real network code at no cost.
 
 | Result | Context |
 |---|---|
-| **~1.7 ms** gateway overhead | p95 of 61.7 ms against a 60 ms provider. 1,000 req/s was the test rate, not a measured limit. |
+| **~0.8 ms** gateway overhead | p50 over a 60 ms provider (p95: ~1.7 ms). 1,000 req/s was the test rate, not a measured limit. |
 | **99.9%** of paid calls avoided | With 20 repeated questions. Real savings depend on how often apps repeat questions. |
 | **98.4%** success while the provider fails half the time | Matches the theory, 1 − (0.5³)²: three attempts on two destinations. The cost is backoff latency (p95 649 ms). |
 | **24 MB** Docker image | Distroless, a single binary with the dashboard inside. About 22 MiB of memory under load. |
@@ -127,7 +130,7 @@ exercise the real network code at no cost.
 
 ## Stack, and learning Go along the way
 
-Go 1.27 (`net/http`, `log/slog`), SQLite without cgo, React 19 with TanStack Query, Recharts and Tailwind
+Go 1.26+ (`net/http`, `log/slog`), SQLite without cgo, React 19 with TanStack Query, Recharts and Tailwind
 embedded through `go:embed`, a distroless Docker image, k6 for load tests, and a public demo on Render.
 
 I come from TypeScript, React and Python, and built Comporta while learning Go. These mappings helped the most:
