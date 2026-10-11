@@ -53,3 +53,10 @@ func TestRotaDesconhecidaDaAPIDa404(t *testing.T) {
 		t.Errorf("rota do painel deixou de cair no index.html: %q", rec.Body.String())
 	}
 }
+
+// Com token vazio, iguais("", "") seria verdade e qualquer um entraria no admin.
+func TestNovoRecusaTokenDeAdminVazio(t *testing.T) {
+	if _, err := Novo(Deps{}); err == nil {
+		t.Fatal("Novo aceitou AdminToken vazio")
+	}
+}

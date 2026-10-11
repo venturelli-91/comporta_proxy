@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -83,6 +84,11 @@ type Servidor struct {
 func Novo(d Deps) (*Servidor, error) {
 	if d.Log == nil {
 		d.Log = slog.Default()
+	}
+	// Token vazio abriria o admin: ConstantTimeCompare("", "") devolve 1. Recusado aqui, uma vez,
+	// em vez de checado em cada login.
+	if d.AdminToken == "" {
+		return nil, errors.New("httpapi: AdminToken vazio")
 	}
 	t := d.Config.Timeouts
 	s := &Servidor{

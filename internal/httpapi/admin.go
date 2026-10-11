@@ -42,7 +42,7 @@ func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	}
 	var v struct{ Token string }
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&v)
-	if s.d.AdminToken == "" || !iguais(v.Token, s.d.AdminToken) {
+	if !iguais(v.Token, s.d.AdminToken) {
 		erro(w, http.StatusUnauthorized, "nao_autorizado", "token de admin inválido")
 		return
 	}

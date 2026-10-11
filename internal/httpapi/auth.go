@@ -161,7 +161,7 @@ func (s *Servidor) admin(h http.HandlerFunc) http.HandlerFunc {
 		} else if c, err := r.Cookie(cookieAdmin); err == nil {
 			ok = s.sessaoValida(c.Value)
 		}
-		if s.d.AdminToken == "" || !ok {
+		if !ok {
 			erro(w, http.StatusUnauthorized, "nao_autorizado", "login de admin necessário")
 			return
 		}
