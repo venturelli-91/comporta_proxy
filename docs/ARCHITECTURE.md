@@ -164,7 +164,7 @@ Batched writes (every 500 events or 1 s). A per-minute aggregate table (`uso_min
 - Screens: overview (spend, savings, p95, error rate), clients and keys (create, revoke, show the key only once), shadow comparison, provider state (breaker), playground.
 - **Playground:** `fetch` with `ReadableStream` to read the SSE of an authenticated POST; shows what the provider received next to the response, time to first token and the cost of the call.
 - **Admin authentication:** sign in with the `ADMIN_TOKEN` → a random session cookie `HttpOnly; Secure; SameSite=Strict`. The token never goes into `localStorage`. Login limited to 5 attempts per IP (consumed on entry); the IP comes from the last `X-Forwarded-For` entry only with `K_SERVICE` or `TRUST_PROXY=1`, otherwise from the connection address.
-- **Build:** `web/dist` embedded in the Go binary with `//go:embed`; Go serves the files and falls back to `index.html` for the React routes (unknown `/v1/*` and `/admin/*` routes return a JSON 404).
+- **Build:** `web/dist` embedded in the Go binary with `//go:embed`; Go serves the files and falls back to `index.html` for the React routes (unknown `/v1/*` and `/admin/*` routes return a JSON 404). `index.html` goes out with `Cache-Control: no-cache` (it's the only unhashed file and points at the hashed bundle), so a deploy is picked up on the next visit.
 
 ## 13. Tests
 

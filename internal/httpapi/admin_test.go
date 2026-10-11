@@ -60,3 +60,26 @@ func TestNovoRecusaTokenDeAdminVazio(t *testing.T) {
 		t.Fatal("Novo accepted an empty AdminToken")
 	}
 }
+
+// index.html is the only build file without a hash in its name and it points at the hashed bundle:
+// if the browser caches it, a deploy keeps loading the old bundle. Hashed assets need no header.
+func TestIndexHTMLNaoFicaEmCache(t *testing.T) {
+	c := novoCenario(t)
+	c.s.d.Painel = fstest.MapFS{
+		"index.html":      {Data: []byte("<html>painel</html>")},
+		"assets/app-1.js": {Data: []byte("console.log(1)")},
+	}
+	h := c.s.Handler()
+	for _, caminho := range []string{"/", "/clientes"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, caminho, nil))
+		if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+			t.Errorf("%s: Cache-Control = %q, want no-cache", caminho, got)
+		}
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/assets/app-1.js", nil))
+	if got := rec.Header().Get("Cache-Control"); got != "" {
+		t.Errorf("hashed asset: Cache-Control = %q, want none", got)
+	}
+}
