@@ -160,11 +160,11 @@ function Vazao({ r }: { r: Relatorio }) {
               key={p.nome}
               className="relative grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1.5 py-2 pl-7 before:absolute before:top-1/2 before:left-0 before:h-px before:w-5 before:bg-texto/60 after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-texto/60 first:after:top-1/2 last:after:bottom-1/2 sm:grid-cols-[11rem_1fr_3.5rem_3rem]"
             >
-              <span className="text-sm text-suave">{p.nome}</span>
+              <span className="col-start-1 row-start-1 text-sm text-suave sm:col-start-auto">{p.nome}</span>
               <span className="col-span-2 row-start-2 h-3 bg-borda/60 sm:col-span-1 sm:row-start-auto">
                 <span className={`block h-full ${p.cor} transition-[width] duration-200 ease-saida`} style={{ width: `${pct(p.n)}%` }} />
               </span>
-              <data value={p.n} className={`row-start-1 text-right text-lg font-semibold ${p.texto} sm:row-start-auto`}>
+              <data value={p.n} className={`col-start-2 row-start-1 text-right text-lg font-semibold ${p.texto} sm:col-start-auto sm:row-start-auto`}>
                 {num(p.n)}
               </data>
               <data value={pct(p.n)} className="hidden text-right text-sm text-suave sm:block">
