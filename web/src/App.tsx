@@ -9,10 +9,10 @@ import Visao from "./telas/Visao";
 import { botao, campo, cartao, IconeClientes, IconePlayground, IconeSair, IconeShadow, IconeVisao, Marca, SeletorTema } from "./ui";
 
 const telas = {
-  visao: { nome: "Overview", curto: "Overview", el: Visao, icone: IconeVisao },
-  clientes: { nome: "Clients and keys", curto: "Clients", el: Clientes, icone: IconeClientes },
-  shadow: { nome: "Migration (shadow)", curto: "Shadow", el: Shadow, icone: IconeShadow },
-  playground: { nome: "Playground", curto: "Playground", el: Playground, icone: IconePlayground },
+  visao: { nome: "Overview", curto: "Overview", el: Visao, icone: IconeVisao, vivo: true },
+  clientes: { nome: "Clients and keys", curto: "Clients", el: Clientes, icone: IconeClientes, vivo: false },
+  shadow: { nome: "Migration (shadow)", curto: "Shadow", el: Shadow, icone: IconeShadow, vivo: true },
+  playground: { nome: "Playground", curto: "Playground", el: Playground, icone: IconePlayground, vivo: false },
 } as const;
 type Tela = keyof typeof telas;
 
@@ -55,13 +55,13 @@ export default function App() {
         </div>
       </header>
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-borda bg-lateral/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:sticky md:top-0 md:flex md:h-screen md:flex-col md:gap-4 md:border-t-0 md:border-r md:bg-lateral md:px-4 md:py-6 md:backdrop-blur-none"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-borda bg-lateral/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:sticky md:top-0 md:flex md:h-screen md:flex-col md:gap-4 md:border-t-0 md:border-r md:bg-lateral md:px-3 md:py-5 md:backdrop-blur-none"
         aria-label="Sections"
       >
-        <div className="hidden px-2 md:block">
+        <div className="hidden px-2.5 pb-3 md:block">
           <Marca />
         </div>
-        <ul className="grid grid-cols-4 md:flex md:flex-col md:gap-1">
+        <ul className="grid grid-cols-4 md:flex md:flex-col md:gap-0.5">
           {(Object.keys(telas) as Tela[]).map((t) => {
             const I = telas[t].icone;
             return (
@@ -69,7 +69,7 @@ export default function App() {
                 <a
                   href={`#${t}`}
                   aria-current={t === tela ? "page" : undefined}
-                  className="flex flex-col items-center gap-1 px-1 py-2 text-[11px] text-suave hover:text-texto aria-[current=page]:font-medium aria-[current=page]:text-acento md:flex-row md:gap-2.5 md:rounded-md md:px-2.5 md:py-2 md:text-sm md:hover:bg-realce md:aria-[current=page]:bg-superficie md:aria-[current=page]:text-texto md:aria-[current=page]:shadow-cartao md:aria-[current=page]:[&>svg]:text-acento"
+                  className="flex flex-col items-center gap-1 px-1 py-2 text-[11px] text-suave hover:text-texto aria-[current=page]:font-medium aria-[current=page]:text-acento md:flex-row md:gap-2.5 md:rounded-md md:px-2.5 md:py-1.5 md:text-sm md:hover:bg-realce md:aria-[current=page]:bg-borda/55 md:aria-[current=page]:text-texto md:aria-[current=page]:[&>svg]:text-acento"
                 >
                   <I />
                   <span className="md:hidden">{telas[t].curto}</span>
@@ -85,7 +85,15 @@ export default function App() {
         </div>
       </nav>
       <main className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-6 pb-28 md:px-10 md:py-10">
-        <h1 className="mb-8 text-2xl font-semibold tracking-tight">{telas[tela].nome}</h1>
+        <header className="mb-8 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-borda pb-4">
+          <h1 className="text-2xl font-semibold tracking-tight">{telas[tela].nome}</h1>
+          {telas[tela].vivo && (
+            <p className="flex items-center gap-2 text-sm text-suave">
+              <span className="size-1.5 animate-pulso rounded-full bg-acento" aria-hidden />
+              Last 24 hours · refreshes every 5 s
+            </p>
+          )}
+        </header>
         <Atual />
       </main>
     </div>
@@ -113,7 +121,7 @@ function Login() {
     }
   };
   return (
-    <main className="grid min-h-screen place-items-center bg-lateral px-4">
+    <main className="grid min-h-screen place-items-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex justify-between">
           <Marca />
@@ -158,7 +166,7 @@ function BotaoSair({ rotulo }: { rotulo: boolean }) {
     <button
       aria-label="Sign out"
       title="Sign out"
-      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-suave hover:bg-realce hover:text-texto"
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm whitespace-nowrap text-suave hover:bg-realce hover:text-texto"
       onClick={async () => {
         await enviar("POST", "/admin/logout");
         qc.resetQueries({ queryKey: ["sessao"] });

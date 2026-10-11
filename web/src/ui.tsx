@@ -2,13 +2,14 @@ import { useState, type ReactNode, type SVGProps } from "react";
 
 // The dashboard's single visual vocabulary: the same button, field and card on every screen.
 export const campo =
-  "mt-1 block w-full rounded-md border border-borda bg-superficie px-3 py-2 text-texto hover:border-suave/60 disabled:opacity-60";
+  "mt-1 block w-full rounded-md border border-borda bg-superficie px-3 py-2 text-texto hover:border-suave/60 focus:border-acento disabled:opacity-60";
 export const botao =
-  "inline-flex items-center justify-center gap-2 rounded-md bg-acento px-3.5 py-2 text-sm font-medium text-sobre-acento shadow-cartao hover:brightness-110 active:brightness-95 disabled:opacity-60 disabled:hover:brightness-100";
+  "inline-flex items-center justify-center gap-2 rounded-md bg-acento px-3.5 py-2 text-sm font-medium text-sobre-acento hover:brightness-110 active:brightness-95 disabled:opacity-60 disabled:hover:brightness-100";
 export const botaoSecundario =
-  "inline-flex items-center justify-center gap-2 rounded-md border border-borda bg-superficie px-3 py-2 text-sm font-medium text-texto hover:bg-realce active:bg-borda/60";
+  "inline-flex items-center justify-center gap-2 rounded-md border border-borda bg-transparent px-3 py-2 text-sm font-medium text-texto hover:border-suave/50 hover:bg-realce active:bg-borda/60";
 export const botaoTexto = "inline-flex items-center gap-1.5 rounded text-sm font-medium hover:underline underline-offset-4";
-export const cartao = "rounded-lg border border-borda bg-superficie shadow-cartao";
+// A container only where one is needed (tables, panels); sections are separated by rules, not boxes.
+export const cartao = "rounded-lg border border-borda bg-superficie";
 
 // State badge: color + label (state never depends on color alone).
 const tons = {
@@ -19,7 +20,7 @@ const tons = {
 } as const;
 export function Selo({ tom, children }: { tom: keyof typeof tons; children: ReactNode }) {
   return (
-    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${tons[tom]}`}>
+    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${tons[tom]}`}>
       {tom !== "neutro" && <span className="size-1.5 rounded-full bg-current" aria-hidden />}
       {children}
     </span>
@@ -94,13 +95,13 @@ const IconeMonitor = () => (
   </Icone>
 );
 
-// Brand: the floodgate (two posts and two boards), the same as the favicon.
+// Brand: the floodgate itself (two posts and two boards) in ink, with the boards in teal; the same as the favicon.
 export function Marca() {
   return (
-    <span className="inline-flex items-center gap-2.5 text-base font-semibold tracking-tight">
-      <svg viewBox="0 0 32 32" className="size-7" aria-hidden>
-        <rect width="32" height="32" rx="8" fill="var(--acento)" />
-        <path d="M9 8v16M23 8v16M9 13h14M9 19h14" stroke="var(--sobre-acento)" strokeWidth="2.5" strokeLinecap="round" />
+    <span className="inline-flex items-center gap-2 text-[15px] font-semibold tracking-tight">
+      <svg viewBox="0 0 24 24" className="size-5.5" aria-hidden>
+        <path d="M5 3v18M19 3v18" stroke="var(--texto)" strokeWidth="2.5" strokeLinecap="square" />
+        <path d="M5 9.5h14M5 15h14" stroke="var(--acento)" strokeWidth="3" />
       </svg>
       Comporta
     </span>
