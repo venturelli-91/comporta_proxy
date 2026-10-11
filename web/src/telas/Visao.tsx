@@ -72,8 +72,8 @@ export default function Visao() {
                 labelStyle={{ color: "var(--texto)", fontWeight: 600 }}
                 itemStyle={{ color: "var(--texto)" }}
               />
-              <Area dataKey="requisicoes" name="Requests" stroke="var(--acento)" strokeWidth={1.5} fill="var(--acento)" fillOpacity={0.08} />
-              <Area dataKey="erros" name="Errors" stroke="var(--erro)" strokeWidth={1.5} fill="transparent" />
+              <Area dataKey="requisicoes" name="Requests" stroke="var(--acento)" strokeWidth={1.5} fill="var(--acento)" fillOpacity={0.08} isAnimationActive={false} />
+              <Area dataKey="erros" name="Errors" stroke="var(--erro)" strokeWidth={1.5} fill="transparent" isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
