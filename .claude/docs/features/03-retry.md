@@ -1,27 +1,27 @@
-# 03 — Retry com backoff e jitter
+# 03 — Retry with backoff and jitter
 
-**Pacote:** `internal/resiliencia` (`retry.go`)
+**Package:** `internal/resiliencia` (`retry.go`)
 
-## O que faz
-`Retry(ctx, tentativas, base, fn)` chama `fn` até N vezes. Repete só erros que dizem `Repetivel() == true`
-(429, 5xx, rede). A espera dobra a cada tentativa: metade fixa, metade aleatória. Um `Retry-After` do
-provedor substitui o cálculo. Se a espera não cabe no prazo do contexto, desiste na hora.
+## What it does
+`Retry(ctx, attempts, base, fn)` calls `fn` up to N times. It only retries errors that report `Repetivel() == true`
+(retryable: 429, 5xx, network). The wait doubles on each attempt: half fixed, half random. A provider's
+`Retry-After` replaces the calculation. If the wait doesn't fit in the context's deadline, it gives up right away.
 
-## Por que assim (decisões)
-- **Interfaces no consumidor:** `repetivel` e `comEspera` estão declaradas no pacote `resiliencia`. O `provedor.ErroHTTP` as satisfaz sem saber que elas existem (tipagem estrutural, como no TypeScript).
-- **"Equal jitter" em vez de jitter cheio:** o piso de metade da espera impede tentativas quase imediatas, e o teste fica determinístico.
-- **Desistir antes de estourar o prazo:** dormir até o contexto morrer só desperdiça uma goroutine e esconde o erro real.
-- **Retry só antes do primeiro byte:** é quem chama (o roteador) que garante isso. O `Retry` não sabe nada de stream.
+## Why this way (decisions)
+- **Interfaces in the consumer:** `repetivel` and `comEspera` are declared in the `resiliencia` package. `provedor.ErroHTTP` satisfies them without knowing they exist (structural typing, like in TypeScript).
+- **"Equal jitter" instead of full jitter:** the floor of half the wait prevents near-immediate retries, and the test stays deterministic.
+- **Give up before blowing the deadline:** sleeping until the context dies only wastes a goroutine and hides the real error.
+- **Retry only before the first byte:** the caller (the router) guarantees this. `Retry` knows nothing about streams.
 
-## Como testar
-`go test ./internal/resiliencia/ -v`: sucesso na 1ª e na 3ª, tentativas esgotadas, erro não repetível, erro comum, Retry-After, contexto com prazo curto.
+## How to test
+`go test ./internal/resiliencia/ -v`: success on the 1st and 3rd attempts, attempts exhausted, non-retryable error, plain error, Retry-After, context with a short deadline.
 
 ## Go vs TypeScript
-- No Go, uma struct implementa uma interface sem declarar `implements`. É o mesmo duck typing estrutural do TS, só que verificado na compilação.
-- `select` com `ctx.Done()` e um timer é o equivalente a `Promise.race([sleep(ms), abortPromise])`.
+- In Go a struct implements an interface without declaring `implements`. It's the same structural duck typing as TS, but checked at compile time.
+- `select` with `ctx.Done()` and a timer is the equivalent of `Promise.race([sleep(ms), abortPromise])`.
 
-## Exercício
-Acrescente um teto máximo de espera (por exemplo, 5 s) para que `base << i` não cresça sem limite, com um caso na tabela.
+## Exercise
+Add a maximum wait (for example, 5 s) so that `base << i` doesn't grow without bound, with a case in the table.
 
-## Pergunta de entrevista
-"Por que jitter? O que acontece com mil clientes fazendo retry exatamente no mesmo intervalo depois de uma queda?"
+## Interview question
+"Why jitter? What happens with a thousand clients retrying at exactly the same interval after an outage?"

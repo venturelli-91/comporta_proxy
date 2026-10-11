@@ -1,41 +1,43 @@
-# 06 — LGPD: mascaramento e restauração
+# 06 — LGPD: masking and restoring
 
-**Pacote:** `internal/lgpd` (`lgpd.go`)
+**Package:** `internal/lgpd` (`lgpd.go`)
 
-## O que faz
-- `Mascarar` troca CNPJ, CPF, cartão, e-mail e telefone por marcadores (`[CPF_1]`, `[EMAIL_2]`...) antes de o texto sair para o provedor.
-- `Restaurar` devolve os valores reais na resposta. `NovoStream` faz o mesmo numa resposta que chega em pedaços.
-- `Len` conta quantos valores foram protegidos (vai para o painel).
+LGPD is Brazil's data protection law. CPF and CNPJ are the Brazilian individual and company taxpayer IDs.
 
-## Por que assim (decisões)
-- **Dígito verificador (CPF/CNPJ) e Luhn (cartão):** regex pura marcaria qualquer número de 11 dígitos.
-- **Ordem dos tipos:** CNPJ → CPF → cartão → e-mail → telefone. Um CPF sem pontuação também parece telefone. O validado ganha.
-- **Pedaço de número maior não conta:** um CPF válido dentro de um protocolo de 13 dígitos fica como está.
-- **Mesmo valor, mesmo marcador:** o modelo mantém a coerência ("o CPF [CPF_1]... confirme o [CPF_1]").
-- **Marcador nunca colide com o texto do usuário:** se ele escreveu `[CPF_1]` literalmente, o CPF real vira `[CPF_2]`. É isso que torna `Restaurar(Mascarar(s)) == s` verdadeiro para qualquer `s`, e o fuzz test prova.
-- **Stream:** segura só o trecho depois do último `[` enquanto ele ainda pode ser começo de marcador (menor que o maior marcador e sem `]`). O resto sai na hora, então o TTFT não piora.
-- **Determinístico:** o mesmo texto sempre gera a mesma saída, o que preserva o cache do gateway e o cache de prefixo da DeepSeek.
-- **O mapa vive só na requisição:** nunca vai para log, cache ou banco.
-- Ponytail: `strings.Map` no lugar do laço manual que extraía os dígitos.
+## What it does
+- `Mascarar` (mask) replaces CNPJ, CPF, card, email and phone with placeholders (`[CPF_1]`, `[EMAIL_2]`...) before the text leaves for the provider. `MascararVarios` does it for all the messages of a request at once.
+- `Restaurar` (restore) puts the real values back in the response. `NovoStream` does the same for a response that arrives in chunks.
+- `Len` counts how many values were protected (it goes to the dashboard).
 
-## Limitações (para o README)
-Nomes, endereços e dados sem formato fixo não são detectados. Telefones fora do padrão brasileiro também não. Com várias mensagens na mesma requisição, um marcador literal escrito numa mensagem pode coincidir com um marcador real gerado em outra: o efeito máximo é o usuário receber o próprio dado de volta.
+## Why this way (decisions)
+- **Check digit (CPF/CNPJ) and Luhn (card):** a plain regex would flag any 11-digit number.
+- **Type order:** CNPJ → CPF → card → email → phone. A CPF without punctuation also looks like a phone number. The validated one wins.
+- **A piece of a bigger number doesn't count:** a valid CPF inside a 13-digit protocol number stays as is.
+- **Same value, same placeholder:** the model stays coherent ("the CPF [CPF_1]... confirm [CPF_1]").
+- **A placeholder never collides with the user's text:** if they literally wrote `[CPF_1]`, the real CPF becomes `[CPF_2]`. Placeholders avoid the text of every message in the request. That's what makes `Restaurar(Mascarar(s)) == s` true for any `s`, and the fuzz test proves it.
+- **Stream:** holds back only the part after the last `[` while it can still be the start of a placeholder (shorter than the longest placeholder and without `]`). Everything else goes out right away, so TTFT doesn't get worse.
+- **Deterministic:** the same text always produces the same output, which preserves the gateway cache and DeepSeek's prefix cache.
+- **The map lives only in the request:** never in logs, cache or database.
+- Ponytail: `strings.Map` instead of the manual loop that extracted the digits.
 
-## Como testar
+## Limitations (for the README)
+Names, addresses and data without a fixed format aren't detected. Neither are phone numbers outside the Brazilian pattern. Only text `messages[].content` is masked: multimodal content and tool-call arguments pass through unmasked.
+
+## How to test
 ```
 go test ./internal/lgpd/ -v
 go test ./internal/lgpd/ -run x -fuzz FuzzMascararRestaurar -fuzztime 30s
 go test ./internal/lgpd/ -run x -fuzz FuzzStream -fuzztime 30s
 ```
-Em 09/10: 500 mil e 3,2 milhões de execuções sem falha.
+On 10/09: 500 thousand and 3.2 million executions without failure.
 
 ## Go vs TypeScript
-- O `regexp` do Go é RE2: sem lookbehind e sem backtracking catastrófico (tempo linear garantido). Por isso a checagem de "dígito ao lado" é feita à mão.
-- Fuzz test é nativo (`go test -fuzz`). No TS seria o `fast-check`.
-- `strings.Builder` evita a realocação de concatenar strings no laço, como um `array.join("")`.
+- Go's `regexp` is RE2: no lookbehind and no catastrophic backtracking (guaranteed linear time). That's why the "digit next to it" check is done by hand.
+- Fuzz testing is built in (`go test -fuzz`). In TS it would be `fast-check`.
+- `strings.Builder` avoids the reallocation of concatenating strings in a loop, like an `array.join("")`.
 
-## Exercício
-Acrescente a detecção de CEP (`\d{5}-?\d{3}`), mas só quando vier depois da palavra "CEP". Escreva os falsos positivos na tabela antes.
+## Exercise
+Add detection of CEP (Brazilian postal code, `\d{5}-?\d{3}`), but only when it follows the word "CEP". Write the false positives in the table first.
 
-## Pergunta de entrevista
-"Como você garante que restaurar nunca altera um texto que o usuário digitou, e como provou isso?"
+## Interview question
+"How do you guarantee that restoring never changes text the user typed, and how did you prove it?"

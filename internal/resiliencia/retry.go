@@ -1,4 +1,4 @@
-// Package resiliencia protege o gateway de provedores instáveis.
+// Package resiliencia (resilience) protects the gateway from unstable providers.
 package resiliencia
 
 import (
@@ -8,17 +8,17 @@ import (
 	"time"
 )
 
-// As interfaces ficam aqui, no pacote que as usa: o retry não precisa conhecer o provedor,
-// só saber se vale tentar de novo e quanto o servidor pediu para esperar.
+// The interfaces live here, in the package that uses them: the retry doesn't need to know the provider,
+// only whether retrying is worth it and how long the server asked to wait.
 type repetivel interface{ Repetivel() bool }
 type comEspera interface{ Espera() time.Duration }
 
-// Retry chama fn até `tentativas` vezes. Só repete erros que se declaram repetíveis
-// (429, 5xx, rede). A espera é exponencial com metade fixa e metade aleatória: o piso garante
-// que o provedor respira, o jitter espalha as tentativas de muitos clientes para que não
-// voltem todos juntos.
-// Se o provedor mandou Retry-After, ele vale mais que o nosso cálculo.
-// Se a espera não cabe no prazo do contexto, desiste já e devolve o último erro.
+// Retry calls fn up to `tentativas` (attempts) times. It only retries errors that declare themselves
+// retryable (429, 5xx, network). The wait is exponential, half fixed and half random: the floor gives
+// the provider room to breathe, the jitter spreads many clients' retries so they don't all come back
+// at once.
+// If the provider sent Retry-After, it wins over our calculation.
+// If the wait doesn't fit in the context's deadline, it gives up right away and returns the last error.
 func Retry(ctx context.Context, tentativas int, base time.Duration, fn func() error) error {
 	var err error
 	for i := 0; i < tentativas; i++ {

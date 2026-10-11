@@ -1,13 +1,13 @@
-// Carga da Comporta, sempre contra o provedor falso (nunca contra a DeepSeek: custaria dinheiro).
+// Comporta load test, always against the fake provider (never against DeepSeek: it would cost money).
 //
-// Suba o gateway sem DEEPSEEK_API_KEY (usa o falso) e rode, por exemplo:
+// Start the gateway without DEEPSEEK_API_KEY (it uses the fake) and run, for example:
 //   docker run --rm -i -e CENARIO=sem_cache -e BASE=http://host.docker.internal:8080 grafana/k6 run - < carga/carga.js
 //
-// Cenários (variável CENARIO):
-//   sem_cache  cada requisição é única: mede o overhead do gateway sobre o provedor
-//   com_cache  20 perguntas repetidas com X-Comporta-Cache: mede quanto o cache evita de chamadas pagas
-//   caos       igual ao sem_cache, mas rode o gateway com FALSO_TAXA_ERRO=0.5: retry, breaker e o
-//              segundo destino do alias "rapido" (comporta.json) seguram o erro
+// Scenarios (CENARIO variable):
+//   sem_cache  (no cache) every request is unique: measures the gateway's overhead over the provider
+//   com_cache  (cache) 20 questions repeated with X-Comporta-Cache: measures how many paid calls the cache avoids
+//   caos       (chaos) same as sem_cache, but run the gateway with FALSO_TAXA_ERRO=0.5: retry, breaker and the
+//              second destination of the "rapido" alias (comporta.json) absorb the errors
 import http from "k6/http";
 import { check } from "k6";
 
@@ -40,7 +40,7 @@ function metricas() {
   return m;
 }
 
-// setup cria um cliente sem limite e com LGPD ligada (o mascaramento entra na medição).
+// setup creates a client with no limits and LGPD on (masking is part of the measurement).
 export function setup() {
   const cli = http.post(`${BASE}/admin/clientes`, JSON.stringify({ nome: `carga-${CENARIO}-${Date.now()}`, lgpd: true }), admin).json();
   const chave = http.post(`${BASE}/admin/clientes/${cli.id}/chaves`, null, admin).json().chave;
@@ -53,7 +53,7 @@ export default function (d) {
   if (CENARIO === "com_cache") headers["X-Comporta-Cache"] = "ligado";
   const r = http.post(
     `${BASE}/v1/chat/completions`,
-    JSON.stringify({ model: "rapido", messages: [{ role: "user", content: `pergunta ${pergunta}, meu CPF é 529.982.247-25` }] }),
+    JSON.stringify({ model: "rapido", messages: [{ role: "user", content: `question ${pergunta}, meu CPF é 529.982.247-25` }] }),
     { headers },
   );
   check(r, { "status 200": (x) => x.status === 200 });
@@ -65,8 +65,8 @@ export function teardown(d) {
   const req = delta("comporta_requisicoes_total");
   const hits = delta("comporta_cache_hits_total");
   console.log(
-    `requisições=${req} erros=${delta("comporta_erros_total")} cache_hits=${hits} ` +
-      `chamadas_evitadas=${req ? ((100 * hits) / req).toFixed(1) : 0}% pii=${delta("comporta_pii_mascarados_total")} ` +
-      `uso_descartado=${delta("comporta_uso_descartados_total")}`,
+    `requests=${req} errors=${delta("comporta_erros_total")} cache_hits=${hits} ` +
+      `calls_avoided=${req ? ((100 * hits) / req).toFixed(1) : 0}% pii=${delta("comporta_pii_mascarados_total")} ` +
+      `usage_dropped=${delta("comporta_uso_descartados_total")}`,
   );
 }

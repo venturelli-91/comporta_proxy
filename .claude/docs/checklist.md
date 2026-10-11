@@ -1,25 +1,25 @@
 # Checklists
 
-## Definition of Done por feature
-- [ ] Reli a seção de `docs/ARQUITETURA.md` e da spec que a feature toca
-- [ ] Vi o teste falhar antes de implementar
-- [ ] `gofmt -l .` e `go vet ./...` sem saída
-- [ ] `go test -race ./...` verde (Docker)
-- [ ] `ponytail:ponytail-review` no diff; cortes aplicados, atalhos marcados com `// ponytail:`
-- [ ] Nada de segredo, chave inteira ou conteúdo de mensagem em log
-- [ ] `.claude/docs/features/NN-*.md` criado
-- [ ] Linha em `.claude/docs/log.md`; item marcado em `.claude/docs/backlog.md`
-- [ ] Um commit atômico, Conventional Commits em português
+## Definition of Done per feature
+- [ ] Re-read the section of `docs/ARCHITECTURE.md` and of the spec that the feature touches
+- [ ] Watched the test fail before implementing
+- [ ] `gofmt -l .` and `go vet ./...` with no output
+- [ ] `go test -race ./...` green (Docker)
+- [ ] `ponytail:ponytail-review` on the diff; cuts applied, shortcuts marked with `// ponytail:`
+- [ ] No secrets, full keys or message content in logs
+- [ ] `.claude/docs/features/NN-*.md` created
+- [ ] A line in `.claude/docs/log.md`; item ticked in `.claude/docs/backlog.md`
+- [ ] One atomic commit, Conventional Commits in English
 
-## Antes do PR
-- [ ] `ponytail:ponytail-audit` no repo e `ponytail:ponytail-debt` → backlog
-- [ ] Review independente do branch inteiro
-- [ ] Smoke: `go run ./cmd/comporta` + `curl` com e sem stream; painel abre
-- [ ] README com números reais (benchmark e k6)
-- [ ] `.env` fora do git; `grep -ri "sk-" .` sem segredo real
+## Before the PR
+- [ ] `ponytail:ponytail-audit` on the repo and `ponytail:ponytail-debt` → backlog
+- [ ] Independent review of the whole branch
+- [ ] Smoke: `go run ./cmd/comporta` + `curl` with and without streaming; the dashboard opens
+- [ ] README with real numbers (benchmark and k6)
+- [ ] `.env` out of git; `grep -ri "sk-" .` finds no real secret
 
-## Antes da entrevista (13/10)
-- [ ] Demo de 3 minutos ensaiada: chave → chat → stream → CPF mascarado → cache hit → painel
-- [ ] Pitch com os números [X] req/s, p95 [Y] ms e [Z]% de economia preenchidos
-- [ ] Rodar a skill `entrevista` pelo menos uma vez
-- [ ] Saber explicar: singleflight, circuit breaker, context/cancelamento, `atomic.Pointer`, gravação em lote
+## Before the interview (10/13)
+- [ ] 3-minute demo rehearsed: key → chat → stream → masked CPF → cache hit → dashboard
+- [ ] Pitch with the numbers filled in (req/s, p95, % saved)
+- [ ] Run the `interview` skill at least once
+- [ ] Be able to explain: singleflight, circuit breaker, context/cancellation, `atomic.Pointer`, batched writes

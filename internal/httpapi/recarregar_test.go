@@ -10,9 +10,9 @@ import (
 	"github.com/venturelli-91/comporta_proxy/internal/armazenamento"
 )
 
-// Um Recarregar que leu o banco antes da revogação não pode gravar o snapshot depois de
-// quem leu depois dela: a chave revogada voltaria a valer até a próxima mutação.
-// O gancho segura o primeiro Recarregar entre a leitura e a troca, onde a corrida acontece.
+// A Recarregar that read the database before the revocation can't store its snapshot after one that
+// read after it: the revoked key would work again until the next mutation.
+// The hook holds the first Recarregar between the read and the swap, where the race happens.
 func TestRecarregarConcorrenteNaoDesfazRevogacao(t *testing.T) {
 	c := novoCenario(t)
 	ctx := context.Background()
@@ -26,24 +26,24 @@ func TestRecarregarConcorrenteNaoDesfazRevogacao(t *testing.T) {
 	}
 
 	leu, solta := make(chan struct{}), make(chan struct{})
-	// Contador e não sync.Once: o Once faria a segunda chamada esperar a primeira, escondendo a corrida.
+	// A counter, not sync.Once: Once would make the second call wait for the first, hiding the race.
 	var chamadas atomic.Int32
 	c.s.antesDeTrocar = func() {
-		if chamadas.Add(1) == 1 { // só o primeiro fica preso
+		if chamadas.Add(1) == 1 { // only the first one is held
 			close(leu)
 			<-solta
 		}
 	}
 
 	var wg sync.WaitGroup
-	wg.Go(func() { _ = c.s.Recarregar(ctx) }) // leu com a chave ainda ativa
+	wg.Go(func() { _ = c.s.Recarregar(ctx) }) // read with the key still active
 	<-leu
 	if err := c.banco.RevogarChave(ctx, cli.ID, k.ID); err != nil {
 		t.Fatal(err)
 	}
 	segundo := make(chan struct{})
-	wg.Go(func() { _ = c.s.Recarregar(ctx); close(segundo) }) // o recarregar do handler de revogar
-	// Sem exclusão o segundo termina já; com ela fica esperando o primeiro. Dá um tempo e solta.
+	wg.Go(func() { _ = c.s.Recarregar(ctx); close(segundo) }) // the revoke handler's reload
+	// Without mutual exclusion the second finishes right away; with it, it waits for the first. Wait a bit and release.
 	select {
 	case <-segundo:
 	case <-time.After(200 * time.Millisecond):
@@ -52,6 +52,6 @@ func TestRecarregarConcorrenteNaoDesfazRevogacao(t *testing.T) {
 	wg.Wait()
 
 	if _, ativa := c.s.snap.Load().chaves[armazenamento.HashChave(texto)]; ativa {
-		t.Fatal("chave revogada voltou ao snapshot por um Recarregar mais antigo")
+		t.Fatal("revoked key came back to the snapshot through an older Recarregar")
 	}
 }

@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Comporta: gateway de LLM com chaves por cliente, orçamento, cache e mascaramento LGPD." />
+    <meta name="description" content="Comporta: an LLM gateway with per-client keys, budgets, caching and LGPD masking of personal data." />
     <title>Comporta</title>
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M9 8v16M23 8v16M9 13h14M9 19h14' stroke='white' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E"
     />
     <script>
-      // Aplica o tema escolhido antes da primeira pintura (sem piscar o claro no escuro).
+      // Applies the chosen theme before the first paint (no light flash in dark mode).
       try {
         const t = localStorage.getItem("tema");
         if (t === "claro" || t === "escuro") document.documentElement.dataset.tema = t;

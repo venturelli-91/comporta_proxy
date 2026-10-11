@@ -1,17 +1,17 @@
 # Features
 
-Uma página por feature, no modelo abaixo. Elas são material de estudo para a entrevista: o código foi
-escrito em modo automático, então o "modo aprendizado" do `CLAUDE.md` acontece aqui.
+One page per feature, following the template below. They are study material for the interview: the code
+was written in automatic mode, so the "learning mode" from `CLAUDE.md` happens here.
 
 ```markdown
-# NN — Nome
+# NN — Name
 
-**Commit:** `abc1234` · **Pacote:** `internal/...`
+**Commit:** `abc1234` · **Package:** `internal/...`
 
-## O que faz
-## Por que assim (decisões)
-## Como testar
+## What it does
+## Why this way (decisions)
+## How to test
 ## Go vs TypeScript
-## Exercício (reescreva você)
-## Pergunta de entrevista
+## Exercise (rewrite it yourself)
+## Interview question
 ```

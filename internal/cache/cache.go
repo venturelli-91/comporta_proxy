@@ -1,4 +1,4 @@
-// Package cache guarda respostas inteiras do provedor em memória, com TTL e limite em bytes.
+// Package cache keeps whole provider responses in memory, with a TTL and a byte limit.
 package cache
 
 import (
@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// Entrada é uma resposta pronta para repetir: o corpo JSON ou o stream SSE inteiro.
-// Custo é o que a chamada original custou; cada hit registra isso como economia.
+// Entrada (entry) is a response ready to replay: the JSON body or the whole SSE stream.
+// Custo is what the original call cost; each hit records it as savings.
 type Entrada struct {
 	Corpo  []byte
 	Stream bool
@@ -21,14 +21,14 @@ type item struct {
 	expira time.Time
 }
 
-// Cache é um LRU limitado por bytes, não por quantidade: respostas de LLM vão de 100 bytes
-// a centenas de KB, então contar itens não diz nada sobre a memória usada.
-// ponytail: um mutex global; shards por hash da chave se a disputa aparecer no profile.
+// Cache is an LRU bounded by bytes, not by count: LLM responses range from 100 bytes to
+// hundreds of KB, so counting items says nothing about the memory used.
+// ponytail: a global mutex; shards by key hash if contention shows up in a profile.
 type Cache struct {
 	mu       sync.Mutex
 	max, uso int64
 	ttl      time.Duration
-	lista    *list.List // frente = mais recente
+	lista    *list.List // front = most recent
 	itens    map[string]*list.Element
 }
 
@@ -36,7 +36,7 @@ func Novo(maxBytes int64, ttl time.Duration) *Cache {
 	return &Cache{max: maxBytes, ttl: ttl, lista: list.New(), itens: map[string]*list.Element{}}
 }
 
-// Get usa Lock (não RLock) porque um hit move o item para a frente da lista.
+// Get uses Lock (not RLock) because a hit moves the item to the front of the list.
 func (c *Cache) Get(chave string) (Entrada, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

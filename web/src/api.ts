@@ -1,4 +1,4 @@
-// Contrato da API do admin: espelha internal/httpapi/admin.go e internal/armazenamento.
+// The admin API contract: mirrors internal/httpapi/admin.go and internal/armazenamento.
 
 export type Totais = {
   requisicoes: number;
@@ -38,7 +38,7 @@ export type Cliente = {
 };
 export type Chave = { id: number; cliente_id: number; prefixo: string; criada_em: string; revogada_em: string | null };
 export type Modelo = { alias: string; destinos: string[]; shadow?: string };
-// O breaker é por cliente: "breaker" é o pior estado entre eles, "abertos" quantos não estão fechados.
+// The breaker is per client: "breaker" is the worst state among them, "abertos" how many aren't closed.
 export type EstadoDestino = { destino: string; breaker: string; abertos: number };
 
 export class ErroApi extends Error {
@@ -50,7 +50,7 @@ export class ErroApi extends Error {
   }
 }
 
-// O cookie HttpOnly do admin vai sozinho (mesma origem); nada de token no localStorage.
+// The admin's HttpOnly cookie is sent automatically (same origin); no token in localStorage.
 export async function api<T>(caminho: string, init?: RequestInit): Promise<T> {
   const r = await fetch(caminho, {
     ...init,
@@ -67,8 +67,8 @@ export async function api<T>(caminho: string, init?: RequestInit): Promise<T> {
 export const enviar = (metodo: string, caminho: string, corpo?: unknown) =>
   api(caminho, { method: metodo, body: corpo === undefined ? undefined : JSON.stringify(corpo) });
 
-// Custos de LLM por chamada são frações de centavo: abaixo de 1 centavo, 2 dígitos significativos.
+// Per-call LLM costs are fractions of a cent: below 1 cent, show 2 significant digits.
 const dolar = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const centavos = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 2 });
 export const usd = (micro: number) => (micro > 0 && micro < 10_000 ? centavos : dolar).format(micro / 1e6);
-export const num = (n: number) => n.toLocaleString("pt-BR");
+export const num = (n: number) => n.toLocaleString("en-US");

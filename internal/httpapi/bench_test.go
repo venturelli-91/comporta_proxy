@@ -9,8 +9,8 @@ import (
 	"github.com/venturelli-91/comporta_proxy/internal/armazenamento"
 )
 
-// BenchmarkOverhead mede o custo do gateway por requisição (auth, admissão, decode, LGPD,
-// roteador, relay e registro de uso) com o provedor falso de latência zero no loopback.
+// BenchmarkOverhead measures the gateway's cost per request (auth, admission, decode, LGPD,
+// router, relay and usage record) with a zero-latency fake provider on loopback.
 //
 //	go test -run x -bench Overhead -benchmem ./internal/httpapi/
 func BenchmarkOverhead(b *testing.B) {

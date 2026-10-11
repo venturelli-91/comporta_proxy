@@ -40,10 +40,10 @@ func TestClientesCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 	if lista, _ := b.ListarClientes(ctx); len(lista) != 0 {
-		t.Fatalf("cliente removido continua na lista: %+v", lista)
+		t.Fatalf("removed client still in the list: %+v", lista)
 	}
 	if err := b.AtualizarCliente(ctx, c); err == nil {
-		t.Fatal("atualizar cliente inexistente devia dar erro")
+		t.Fatal("updating a nonexistent client should fail")
 	}
 }
 
@@ -55,14 +55,14 @@ func TestChaveGuardadaSoComoHash(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(texto, "ck_") || len(texto) != 29 || !strings.HasPrefix(texto, strings.TrimSuffix(chave.Prefixo, "…")) {
-		t.Fatalf("texto = %q, prefixo = %q", texto, chave.Prefixo)
+		t.Fatalf("text = %q, prefix = %q", texto, chave.Prefixo)
 	}
 	var n int
 	if err := b.db.QueryRow(`SELECT count(*) FROM chaves WHERE hash = ? AND hash <> ?`, HashChave(texto), texto).Scan(&n); err != nil || n != 1 {
-		t.Fatalf("hash não encontrado (n=%d, err=%v)", n, err)
+		t.Fatalf("hash not found (n=%d, err=%v)", n, err)
 	}
 	if err := b.db.QueryRow(`SELECT count(*) FROM chaves WHERE hash = ? OR prefixo = ?`, texto, texto).Scan(&n); err != nil || n != 0 {
-		t.Fatal("a chave inteira não pode estar gravada")
+		t.Fatal("the full key must not be stored")
 	}
 	ativas, _ := b.ChavesAtivas(ctx)
 	if ativas[HashChave(texto)] != c.ID {
@@ -76,16 +76,16 @@ func TestRevogarChave(t *testing.T) {
 	_, chave, _ := b.CriarChave(ctx, c.ID)
 	outro, _ := b.CriarCliente(ctx, Cliente{Nome: "outro"})
 	if err := b.RevogarChave(ctx, outro.ID, chave.ID); !errors.Is(err, ErrNaoEncontrado) {
-		t.Fatalf("revogar pela rota de outro cliente: err = %v, queria ErrNaoEncontrado", err)
+		t.Fatalf("revoking through another client's route: err = %v, want ErrNaoEncontrado", err)
 	}
 	if ativas, _ := b.ChavesAtivas(ctx); len(ativas) != 1 {
-		t.Fatal("a chave foi revogada pela rota de outro cliente")
+		t.Fatal("the key was revoked through another client's route")
 	}
 	if err := b.RevogarChave(ctx, c.ID, chave.ID); err != nil {
 		t.Fatal(err)
 	}
 	if ativas, _ := b.ChavesAtivas(ctx); len(ativas) != 0 {
-		t.Fatalf("chave revogada continua ativa: %v", ativas)
+		t.Fatalf("revoked key still active: %v", ativas)
 	}
 	lista, _ := b.ListarChaves(ctx, c.ID)
 	if len(lista) != 1 || lista[0].RevogadaEm == nil {
@@ -102,22 +102,22 @@ func TestGravadorEmLote(t *testing.T) {
 	agora := time.Now()
 	for i := range 3 {
 		if !g.Registrar(Evento{TS: agora, ClienteID: 1, Modelo: "rapido", Status: 200, LatenciaMs: int64(i)}) {
-			t.Fatal("Registrar recusou com canal vazio")
+			t.Fatal("Registrar refused with an empty channel")
 		}
 	}
-	parar() // o shutdown precisa drenar o que ficou no canal
+	parar() // shutdown must drain what's left in the channel
 	<-fim
 	var n int
 	_ = b.db.QueryRow(`SELECT count(*) FROM uso`).Scan(&n)
 	if n != 3 {
-		t.Fatalf("gravou %d eventos, queria 3", n)
+		t.Fatalf("wrote %d events, want 3", n)
 	}
 }
 
 func TestGravadorCheioDescartaSemTravar(t *testing.T) {
 	g := NovoGravador(abrir(t), 1)
 	if !g.Registrar(Evento{}) {
-		t.Fatal("primeiro evento devia entrar")
+		t.Fatal("the first event should get in")
 	}
 	feito := make(chan bool)
 	go func() { feito <- g.Registrar(Evento{}) }()
@@ -127,7 +127,7 @@ func TestGravadorCheioDescartaSemTravar(t *testing.T) {
 			t.Fatalf("ok=%v descartados=%d", ok, g.Descartados())
 		}
 	case <-time.After(time.Second):
-		t.Fatal("Registrar travou com o canal cheio")
+		t.Fatal("Registrar blocked with a full channel")
 	}
 }
 
@@ -158,22 +158,22 @@ func TestRelatorio(t *testing.T) {
 	}
 	tot := r.Total
 	if tot.Requisicoes != 101 || tot.Erros != 1 || tot.CacheHits != 10 || tot.CustoMicro != 900 || tot.EconomiaMicro != 100 || tot.PII != 100 {
-		t.Fatalf("Total = %+v (shadow não entra nos totais)", tot)
+		t.Fatalf("Total = %+v (shadow is not part of the totals)", tot)
 	}
 	if tot.P95Ms != 95 {
-		t.Errorf("P95Ms = %d, queria 95", tot.P95Ms)
+		t.Errorf("P95Ms = %d, want 95", tot.P95Ms)
 	}
 	if len(r.PorCliente) != 2 || r.PorCliente[0].Nome != "loja" {
 		t.Errorf("PorCliente = %+v", r.PorCliente)
 	}
 	if len(r.Serie) != 2 {
-		t.Errorf("Serie = %+v, queria 2 minutos", r.Serie)
+		t.Errorf("Serie = %+v, want 2 minutes", r.Serie)
 	}
 	if len(r.Shadow) != 1 || r.Shadow[0].Destino != "deepseek/deepseek-v4-pro" || r.Shadow[0].LatenciaMediaMs != 900 {
 		t.Errorf("Shadow = %+v", r.Shadow)
 	}
 	if so, _ := b.Relatorio(ctx, base.Add(-time.Hour), base.Add(time.Hour), app.ID); so.Total.Requisicoes != 1 {
-		t.Errorf("filtro por cliente: %+v", so.Total)
+		t.Errorf("client filter: %+v", so.Total)
 	}
 
 	gasto, err := b.GastoDoMes(ctx, base)
@@ -182,8 +182,8 @@ func TestRelatorio(t *testing.T) {
 	}
 }
 
-// Um ID removido nunca volta: senão o cliente novo herdaria histórico de uso, gasto do mês
-// e limitador do cliente removido.
+// A removed ID never comes back: otherwise the new client would inherit the removed client's
+// usage history, month's spend and limiter.
 func TestIDNuncaReaproveitado(t *testing.T) {
 	b := abrir(t)
 	b.CriarCliente(ctx, Cliente{Nome: "a"})
@@ -194,49 +194,49 @@ func TestIDNuncaReaproveitado(t *testing.T) {
 	}
 	novo, _ := b.CriarCliente(ctx, Cliente{Nome: "c"})
 	if novo.ID == velho.ID {
-		t.Fatalf("cliente novo reaproveitou o ID %d do removido", novo.ID)
+		t.Fatalf("new client reused the removed client's ID %d", novo.ID)
 	}
 	_, kNova, _ := b.CriarChave(ctx, novo.ID)
 	if kNova.ID == kVelha.ID {
-		t.Fatalf("chave nova reaproveitou o ID %d", kNova.ID)
+		t.Fatalf("new key reused ID %d", kNova.ID)
 	}
 }
 
-// A demo pública sobe com banco vazio (disco efêmero): o seed cria o cliente demo com a
-// chave publicada no README. Com clientes já cadastrados, não mexe em nada.
+// The public demo starts with an empty database (ephemeral disk): the seed creates the demo client
+// with the key published in the README. With clients already registered, it touches nothing.
 func TestSemearDemo(t *testing.T) {
 	b := abrir(t)
 	const chave = "ck_demo_publica"
 	criou, err := b.SemearDemo(ctx, chave)
 	if err != nil || !criou {
-		t.Fatalf("primeiro seed: criou=%v err=%v", criou, err)
+		t.Fatalf("first seed: created=%v err=%v", criou, err)
 	}
 	ativas, _ := b.ChavesAtivas(ctx)
 	clientes, _ := b.ListarClientes(ctx)
 	if len(clientes) != 1 || !clientes[0].LGPD || ativas[HashChave(chave)] != clientes[0].ID {
-		t.Fatalf("clientes=%+v ativas=%v", clientes, ativas)
+		t.Fatalf("clients=%+v active=%v", clientes, ativas)
 	}
 	if criou, err := b.SemearDemo(ctx, chave); err != nil || criou {
-		t.Fatalf("segundo seed não pode criar de novo: criou=%v err=%v", criou, err)
+		t.Fatalf("second seed must not create again: created=%v err=%v", criou, err)
 	}
 	if _, err := b.SemearDemo(ctx, "sem_prefixo"); err == nil {
-		t.Fatal("chave sem ck_ seria recusada pela autenticação: o seed tem de recusar também")
+		t.Fatal("a key without ck_ would be refused by authentication: the seed must refuse it too")
 	}
 }
 
-// Um lote que falha ao gravar não pode sumir em silêncio: entra em descartados (que vai para
-// o /metrics) para a perda de registros de uso aparecer.
+// A batch that fails to write can't vanish silently: it goes into dropped (which feeds
+// /metrics) so the loss of usage records shows up.
 func TestGravadorContaLoteQueFalha(t *testing.T) {
 	b := abrir(t)
 	g := NovoGravador(b, 100)
 	for range 3 {
 		g.Registrar(Evento{TS: time.Now(), ClienteID: 1, Modelo: "rapido", Status: 200})
 	}
-	b.Fechar() // toda escrita falha daqui em diante
+	b.Fechar() // every write fails from here on
 	ctxRodar, parar := context.WithCancel(ctx)
-	parar() // drena e grava o lote final de uma vez
+	parar() // drains and writes the final batch at once
 	g.Rodar(ctxRodar)
 	if n := g.Descartados(); n != 3 {
-		t.Fatalf("descartados = %d, queria 3", n)
+		t.Fatalf("dropped = %d, want 3", n)
 	}
 }

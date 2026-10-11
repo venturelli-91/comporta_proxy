@@ -24,21 +24,21 @@ import (
 )
 
 const (
-	maxCorpo    = 1 << 20  // 1 MiB por requisição
-	maxResposta = 16 << 20 // teto para respostas lidas inteiras (sem stream, cache)
+	maxCorpo    = 1 << 20  // 1 MiB per request
+	maxResposta = 16 << 20 // ceiling for responses read whole (non-streaming, cache)
 )
 
-var errRespostaGrande = errors.New("resposta do provedor acima de 16 MiB")
+var errRespostaGrande = errors.New("provider response above 16 MiB")
 
-// usoEstimado: o provedor cobrou mas o usage não chegou (stream cortado, resposta acima do teto).
-// ~4 bytes por token na entrada; a saída vem de quem chama, para o orçamento valer.
-// ponytail: sem marcar o evento como estimado; coluna nova quando o painel precisar.
+// usoEstimado (estimated usage): the provider charged but the usage never arrived (cut stream,
+// response above the ceiling). ~4 bytes per input token; the output comes from the caller, so the budget holds.
+// ponytail: the event isn't flagged as estimated; a new column when the dashboard needs it.
 func usoEstimado(p *pedido, saida int64) gateway.Uso {
 	return gateway.Uso{PromptTokens: int64(len(p.corpo["messages"]) / 4), CompletionTokens: saida}
 }
 
-// lerResposta lê a resposta inteira até o teto. Lê 1 byte a mais para distinguir "coube" de
-// "foi cortada": cortada vira erro (502), nunca uma resposta 200 incompleta ou um item de cache.
+// lerResposta reads the whole response up to the ceiling. It reads 1 extra byte to tell "fit" from
+// "was cut": cut becomes an error (502), never an incomplete 200 response or a cache entry.
 func lerResposta(r io.Reader) ([]byte, error) {
 	b, err := io.ReadAll(io.LimitReader(r, maxResposta+1))
 	if err == nil && len(b) > maxResposta {
@@ -47,7 +47,7 @@ func lerResposta(r io.Reader) ([]byte, error) {
 	return b, err
 }
 
-// pedido é o estado de uma requisição de chat ao longo do caminho.
+// pedido is the state of a chat request along the path.
 type pedido struct {
 	cli    armazenamento.Cliente
 	alias  string
@@ -56,7 +56,7 @@ type pedido struct {
 	mapa   *lgpd.Mapa
 	ev     armazenamento.Evento
 
-	pediuUso bool // o cliente pediu stream_options.include_usage
+	pediuUso bool // the client asked for stream_options.include_usage
 	chunks   int64
 }
 
@@ -68,29 +68,29 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 		s.registrar(p.ev)
 	}()
 
-	// Admissão antes de qualquer trabalho caro.
+	// Admission before any expensive work.
 	if !s.ocupar(p.cli.ID) {
 		retryAfter(w, time.Second)
-		s.falhar(w, p, http.StatusTooManyRequests, "concorrencia_excedida", "requisições simultâneas demais para esta chave")
+		s.falhar(w, p, http.StatusTooManyRequests, "concorrencia_excedida", "too many concurrent requests for this key")
 		return
 	}
 	defer s.soltar(p.cli.ID)
 	if ok, espera := s.permitir(p.cli); !ok {
 		retryAfter(w, espera)
-		s.falhar(w, p, http.StatusTooManyRequests, "limite_excedido", "limite de requisições por minuto excedido")
+		s.falhar(w, p, http.StatusTooManyRequests, "limite_excedido", "requests per minute limit exceeded")
 		return
 	}
 	if s.orcamentoEsgotado(p.cli) {
-		s.falhar(w, p, http.StatusPaymentRequired, "orcamento_esgotado", "orçamento mensal esgotado")
+		s.falhar(w, p, http.StatusPaymentRequired, "orcamento_esgotado", "monthly budget exhausted")
 		return
 	}
 
-	// Decodifica num mapa de RawMessage: campos que o gateway não conhece seguem intactos.
+	// Decode into a map of RawMessage: fields the gateway doesn't know go through untouched.
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxCorpo)).Decode(&p.corpo); err != nil {
 		if grande := new(http.MaxBytesError); errors.As(err, &grande) {
-			s.falhar(w, p, http.StatusRequestEntityTooLarge, "corpo_grande", "corpo acima de 1 MiB")
+			s.falhar(w, p, http.StatusRequestEntityTooLarge, "corpo_grande", "body above 1 MiB")
 		} else {
-			s.falhar(w, p, http.StatusBadRequest, "corpo_invalido", "JSON inválido")
+			s.falhar(w, p, http.StatusBadRequest, "corpo_invalido", "invalid JSON")
 		}
 		return
 	}
@@ -99,32 +99,32 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 	p.ev.Modelo, p.ev.Stream = p.alias, p.stream
 	m, existe := s.d.Config.Modelos[p.alias]
 	if !existe {
-		s.falhar(w, p, http.StatusBadRequest, "modelo_desconhecido", fmt.Sprintf("modelo %q não existe", p.alias))
+		s.falhar(w, p, http.StatusBadRequest, "modelo_desconhecido", fmt.Sprintf("model %q does not exist", p.alias))
 		return
 	}
 	if len(p.cli.Modelos) > 0 && !slices.Contains(p.cli.Modelos, p.alias) {
-		s.falhar(w, p, http.StatusForbidden, "modelo_nao_liberado", fmt.Sprintf("modelo %q não liberado para esta chave", p.alias))
+		s.falhar(w, p, http.StatusForbidden, "modelo_nao_liberado", fmt.Sprintf("model %q is not allowed for this key", p.alias))
 		return
 	}
 
-	// LGPD antes do cache: a chave de cache e tudo que sai daqui só veem marcadores.
+	// LGPD before the cache: the cache key and everything that leaves from here only see placeholders.
 	if p.cli.LGPD {
 		if err := mascararMensagens(p.corpo, p.mapa); err != nil {
-			s.falhar(w, p, http.StatusBadRequest, "corpo_invalido", "messages inválido")
+			s.falhar(w, p, http.StatusBadRequest, "corpo_invalido", "invalid messages")
 			return
 		}
 		p.ev.PII = p.mapa.Len()
 		s.met.pii.Add(int64(p.ev.PII))
-		// O Playground mostra lado a lado o que o provedor recebeu e o que voltou. Seguro de devolver:
-		// o texto já está mascarado e é a mensagem do próprio cliente. Base64 porque cabeçalho só
-		// aceita ASCII; corte em 2 KB porque proxies na frente limitam o tamanho dos cabeçalhos.
+		// The Playground shows what the provider received next to what came back. Safe to return:
+		// the text is already masked and it's the client's own message. Base64 because headers only
+		// take ASCII; cut at 2 KB because proxies in front limit header size.
 		if t := ultimaDoUsuario(p.corpo); t != "" {
 			w.Header().Set("X-Comporta-Enviado", base64.StdEncoding.EncodeToString([]byte(t)))
 		}
 	}
 	if p.stream {
-		// Sem include_usage o stream não traz usage e o custo ficaria desconhecido. Os outros
-		// campos de stream_options do cliente são mantidos.
+		// Without include_usage the stream carries no usage and the cost would be unknown. The client's
+		// other stream_options fields are kept.
 		opcoes := map[string]any{}
 		_ = json.Unmarshal(p.corpo["stream_options"], &opcoes)
 		p.pediuUso = opcoes["include_usage"] == true
@@ -135,15 +135,15 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 		s.comCache(w, r, p)
 		return
 	}
-	// Shadow só no caminho sem cache: comparar uma resposta reaproveitada não mede nada e paga uma chamada à toa.
+	// Shadow only on the uncached path: comparing a reused response measures nothing and pays for a call for nothing.
 	if m.Shadow != nil {
 		s.sombra(p, *m.Shadow)
 	}
 	s.direto(w, r, p)
 }
 
-// direto: sem cache. Com stream, repassa ao vivo; o contexto da requisição vai até o
-// provedor, então um cliente que desconecta cancela a chamada paga.
+// direto (direct): no cache. With streaming, relays live; the request's context goes all the way
+// to the provider, so a client that disconnects cancels the paid call.
 func (s *Servidor) direto(w http.ResponseWriter, r *http.Request, p *pedido) {
 	ctx, cancel := context.WithCancelCause(r.Context())
 	defer cancel(nil)
@@ -169,7 +169,7 @@ func (s *Servidor) direto(w http.ResponseWriter, r *http.Request, p *pedido) {
 		v.r = resp.Body
 		uso, err = s.relaySSE(ctx, w, v, p)
 		if uso == (gateway.Uso{}) {
-			// Stream cortado antes do chunk de usage: o provedor cobra mesmo assim (~1 token por chunk).
+			// Stream cut before the usage chunk: the provider charges anyway (~1 token per chunk).
 			uso = usoEstimado(p, p.chunks)
 		}
 	} else {
@@ -178,7 +178,7 @@ func (s *Servidor) direto(w http.ResponseWriter, r *http.Request, p *pedido) {
 			uso = usoDe(b, false)
 			s.responderCorpo(w, p, b)
 		} else if errors.Is(err, errRespostaGrande) {
-			uso = usoEstimado(p, maxResposta/4) // o provedor cobrou a resposta inteira
+			uso = usoEstimado(p, maxResposta/4) // the provider charged for the whole response
 		}
 	}
 	if err != nil {
@@ -187,20 +187,19 @@ func (s *Servidor) direto(w http.ResponseWriter, r *http.Request, p *pedido) {
 	s.cobrar(p, dest, uso)
 }
 
-// resultadoSF é o que o líder do singleflight entrega a todos que esperavam a mesma chave.
+// resultadoSF is what the singleflight leader hands to everyone waiting on the same key.
 type resultadoSF struct {
 	e    cache.Entrada
 	dest gateway.Destino
 	uso  gateway.Uso
 }
 
-// comCache: hit responde da memória. Miss passa pelo singleflight: N pedidos iguais ao mesmo
-// tempo viram 1 chamada; o líder lê a resposta inteira, grava no cache e todos recebem os
-// mesmos bytes (em stream, como replay).
-// ponytail: os seguidores não recebem o stream ao vivo; fanout fica para quando o TTFT de
-// requisições cacheadas importar.
+// comCache (with cache): a hit answers from memory. A miss goes through the singleflight: N identical
+// concurrent requests become 1 call; the leader reads the whole response, stores it in the cache and
+// everyone gets the same bytes (as a replay when streaming).
+// ponytail: followers don't get the live stream; fan-out waits until the TTFT of cached requests matters.
 func (s *Servidor) comCache(w http.ResponseWriter, r *http.Request, p *pedido) {
-	b, _ := json.Marshal(p.corpo) // json.Marshal ordena as chaves do mapa: corpo igual → chave igual
+	b, _ := json.Marshal(p.corpo) // json.Marshal sorts map keys: same body → same key
 	h := sha256.Sum256(append([]byte(strconv.FormatInt(p.cli.ID, 10)+"\x00"), b...))
 	chave := hex.EncodeToString(h[:])
 
@@ -213,14 +212,14 @@ func (s *Servidor) comCache(w http.ResponseWriter, r *http.Request, p *pedido) {
 	lider := false
 	v, err, _ := s.sf.Do(chave, func() (any, error) {
 		lider = true
-		// O líder não pode cancelar a chamada de todos se desconectar.
+		// The leader must not cancel everyone's call if it disconnects.
 		base, fim := context.WithTimeout(context.WithoutCancel(r.Context()), s.total)
 		defer fim()
 		ctx, cancel := context.WithCancelCause(base)
 		defer cancel(nil)
 		var v *vigia
 		if p.stream {
-			v = s.novaVigia(cancel) // o mesmo watchdog do caminho direto
+			v = s.novaVigia(cancel) // the same watchdog as the direct path
 			defer v.parar()
 		}
 		resp, dest, err := s.d.Roteador.Chamar(ctx, p.cli.ID, p.alias, p.corpo)
@@ -235,7 +234,7 @@ func (s *Servidor) comCache(w http.ResponseWriter, r *http.Request, p *pedido) {
 		corpo, err := lerResposta(leitor)
 		if err != nil {
 			if errors.Is(err, errRespostaGrande) {
-				s.cobrar(p, dest, usoEstimado(p, maxResposta/4)) // o líder paga o que o provedor cobrou
+				s.cobrar(p, dest, usoEstimado(p, maxResposta/4)) // the leader pays what the provider charged
 			}
 			return nil, causa(ctx, err)
 		}
@@ -268,9 +267,9 @@ func (s *Servidor) entregar(w http.ResponseWriter, r *http.Request, p *pedido, e
 	}
 }
 
-// responderCorpo devolve um JSON sem stream, com os dados pessoais restaurados. Os valores
-// restaurados (dígitos, e-mail, telefone) não têm aspas nem barras, então trocar direto no
-// JSON não quebra o formato.
+// responderCorpo returns a non-streaming JSON with the personal data restored. Restored values
+// (digits, email, phone) have no quotes or backslashes, so replacing them directly in the JSON
+// doesn't break the format.
 func (s *Servidor) responderCorpo(w http.ResponseWriter, p *pedido, b []byte) {
 	if p.mapa.Len() > 0 {
 		b = []byte(p.mapa.Restaurar(string(b)))
@@ -288,8 +287,8 @@ func (s *Servidor) cobrar(p *pedido, dest gateway.Destino, uso gateway.Uso) {
 	s.gastar(p.cli.ID, p.ev.CustoMicro)
 }
 
-// sombra manda a mesma requisição (sem stream) ao destino shadow em segundo plano. O cliente
-// nunca espera nem recebe essa resposta; só a comparação fica registrada.
+// sombra (shadow) sends the same request (non-streaming) to the shadow destination in the background.
+// The client never waits for or receives that response; only the comparison is recorded.
 func (s *Servidor) sombra(p *pedido, d gateway.Destino) {
 	corpo := maps.Clone(p.corpo)
 	corpo["stream"] = json.RawMessage("false")
@@ -340,12 +339,12 @@ func (s *Servidor) falhar(w http.ResponseWriter, p *pedido, status int, codigo, 
 	erro(w, status, codigo, msg)
 }
 
-// statusDe traduz o erro do caminho até o provedor para o status devolvido ao cliente.
+// statusDe translates an error on the way to the provider into the status returned to the client.
 func statusDe(err error) int {
 	var e *provedor.ErroHTTP
 	switch {
 	case errors.Is(err, context.Canceled):
-		return 499 // convenção do nginx: o cliente desistiu
+		return 499 // nginx convention: the client gave up
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, errTimeout):
 		return http.StatusGatewayTimeout
 	case errors.Is(err, gateway.ErrOcupado):
@@ -355,7 +354,7 @@ func statusDe(err error) int {
 	case errors.As(err, &e) && e.Status == 429:
 		return http.StatusTooManyRequests
 	case errors.As(err, &e) && (e.Status == 400 || e.Status == 422):
-		return e.Status // pedido malformado: o cliente precisa saber
+		return e.Status // malformed request: the client needs to know
 	default:
 		return http.StatusBadGateway
 	}
@@ -369,22 +368,22 @@ func (s *Servidor) erroProvedor(w http.ResponseWriter, p *pedido, err error) {
 	case 499:
 	case http.StatusTooManyRequests:
 		retryAfter(w, time.Second)
-		erro(w, st, "provedor_ocupado", "provedor sobrecarregado, tente de novo")
+		erro(w, st, "provedor_ocupado", "provider overloaded, try again")
 	case http.StatusServiceUnavailable:
-		erro(w, st, "sem_destino", "nenhum provedor disponível no momento")
+		erro(w, st, "sem_destino", "no provider available right now")
 	case http.StatusGatewayTimeout:
-		erro(w, st, "timeout", "o provedor não respondeu a tempo")
+		erro(w, st, "timeout", "the provider did not respond in time")
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
 		errors.As(err, &e)
 		erro(w, st, "pedido_invalido", e.Mensagem)
 	default:
-		s.d.Log.Warn("provedor", "request_id", p.ev.RequestID, "erro", err.Error())
-		erro(w, st, "erro_provedor", "o provedor falhou")
+		s.d.Log.Warn("provider", "request_id", p.ev.RequestID, "error", err.Error())
+		erro(w, st, "erro_provedor", "the provider failed")
 	}
 }
 
-// erroRelay trata falhas depois que a resposta do provedor começou: se nada foi escrito
-// ainda, dá para mandar um erro de verdade; senão só resta registrar e encerrar.
+// erroRelay handles failures after the provider's response has started: if nothing has been
+// written yet, a real error can still be sent; otherwise all that's left is to record and finish.
 func (s *Servidor) erroRelay(w http.ResponseWriter, p *pedido, err error) {
 	if p.ev.Status == 0 {
 		s.erroProvedor(w, p, err)

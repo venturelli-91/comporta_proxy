@@ -12,7 +12,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// Passar de 10 mil IPs não pode devolver tentativas a quem já gastou as suas.
+// Going past 10k IPs must not give attempts back to whoever already spent theirs.
 func TestLimiteLoginPodaSoOsCheios(t *testing.T) {
 	s := &Servidor{tentativas: map[string]*rate.Limiter{}}
 	for i := range 10_000 {
@@ -24,18 +24,18 @@ func TestLimiteLoginPodaSoOsCheios(t *testing.T) {
 	}
 	s.tentativas["203.0.113.9"] = gasto
 
-	s.limiteLogin("198.51.100.7") // 10.001 entradas: dispara a poda
+	s.limiteLogin("198.51.100.7") // 10,001 entries: triggers the pruning
 
 	if s.tentativas["203.0.113.9"] != gasto {
-		t.Fatal("o limitador gasto foi apagado: o atacante ganhou tentativas novas")
+		t.Fatal("the spent limiter was deleted: the attacker got fresh attempts")
 	}
 	if n := len(s.tentativas); n != 2 {
-		t.Fatalf("sobraram %d limitadores; queria só o gasto e o novo", n)
+		t.Fatalf("%d limiters left; want only the spent one and the new one", n)
 	}
 }
 
-// Com o painel ligado, "/" pega tudo: uma rota errada da API não pode virar o index.html com 200,
-// senão um SDK chamando /v1/embeddings recebe HTML e quebra com um erro confuso.
+// With the dashboard on, "/" catches everything: a wrong API route can't become index.html with a 200,
+// or an SDK calling /v1/embeddings gets HTML and breaks with a confusing error.
 func TestRotaDesconhecidaDaAPIDa404(t *testing.T) {
 	c := novoCenario(t)
 	c.s.d.Painel = fstest.MapFS{"index.html": {Data: []byte("<html>painel</html>")}}
@@ -44,19 +44,19 @@ func TestRotaDesconhecidaDaAPIDa404(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, caminho, nil))
 		if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `"rota_inexistente"`) {
-			t.Errorf("%s: status %d, corpo %q; queria 404 JSON", caminho, rec.Code, rec.Body.String())
+			t.Errorf("%s: status %d, body %q; want a JSON 404", caminho, rec.Code, rec.Body.String())
 		}
 	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/clientes", nil))
 	if !strings.Contains(rec.Body.String(), "painel") {
-		t.Errorf("rota do painel deixou de cair no index.html: %q", rec.Body.String())
+		t.Errorf("dashboard route no longer falls back to index.html: %q", rec.Body.String())
 	}
 }
 
-// Com token vazio, iguais("", "") seria verdade e qualquer um entraria no admin.
+// With an empty token, iguais("", "") would be true and anyone could get into the admin.
 func TestNovoRecusaTokenDeAdminVazio(t *testing.T) {
 	if _, err := Novo(Deps{}); err == nil {
-		t.Fatal("Novo aceitou AdminToken vazio")
+		t.Fatal("Novo accepted an empty AdminToken")
 	}
 }

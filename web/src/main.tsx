@@ -5,9 +5,9 @@ import App from "./App";
 import { ErroApi } from "./api";
 import "./index.css";
 
-// Sessão vencida (12 h) ou revogada no servidor: qualquer 401 de uma tela refaz a consulta da
-// sessão, que também dá 401, e o App volta para o login em vez de deixar as telas quebradas.
-// A própria consulta da sessão fica de fora, senão o 401 dela reiniciaria ela mesma em laço.
+// Session expired (12 h) or revoked on the server: any 401 on a screen refetches the session
+// query, which also returns 401, and the App goes back to login instead of leaving broken screens.
+// The session query itself is left out, otherwise its own 401 would restart it in a loop.
 const sessaoCaiu = (err: Error, chave?: readonly unknown[]) => {
   if (err instanceof ErroApi && err.status === 401 && chave?.[0] !== "sessao") {
     cliente.resetQueries({ queryKey: ["sessao"] });

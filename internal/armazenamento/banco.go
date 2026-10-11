@@ -1,4 +1,4 @@
-// Package armazenamento guarda clientes, chaves e uso no SQLite (modernc, sem cgo).
+// Package armazenamento (storage) keeps clients, keys and usage in SQLite (modernc, no cgo).
 package armazenamento
 
 import (
@@ -16,12 +16,12 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var ErrNaoEncontrado = errors.New("não encontrado")
+var ErrNaoEncontrado = errors.New("not found")
 
 type Banco struct{ db *sql.DB }
 
-// AUTOINCREMENT: sem ele o SQLite reaproveita o maior ID removido, e um cliente novo herdaria
-// o histórico de uso, o gasto do mês e o limitador do cliente apagado.
+// AUTOINCREMENT: without it SQLite reuses the highest deleted ID, and a new client would inherit
+// the deleted client's usage history, month's spend and limiter.
 const schema = `
 CREATE TABLE IF NOT EXISTS clientes (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,16 +65,16 @@ CREATE TABLE IF NOT EXISTS uso (
 CREATE INDEX IF NOT EXISTS uso_ts ON uso(ts);
 `
 
-// Abrir cria o banco se preciso. WAL deixa o painel ler enquanto o gravador escreve;
-// busy_timeout evita "database is locked" quando as duas coisas coincidem.
+// Abrir (open) creates the database if needed. WAL lets the dashboard read while the writer writes;
+// busy_timeout avoids "database is locked" when both happen at once.
 func Abrir(caminho string) (*Banco, error) {
 	db, err := sql.Open("sqlite", "file:"+caminho+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
 	if err != nil {
-		return nil, fmt.Errorf("abrindo banco: %w", err)
+		return nil, fmt.Errorf("opening database: %w", err)
 	}
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("criando schema: %w", err)
+		return nil, fmt.Errorf("creating schema: %w", err)
 	}
 	return &Banco{db: db}, nil
 }
@@ -86,11 +86,11 @@ func (b *Banco) Ping(ctx context.Context) error { return b.db.PingContext(ctx) }
 type Cliente struct {
 	ID             int64    `json:"id"`
 	Nome           string   `json:"nome"`
-	RPM            int      `json:"rpm"`             // 0 = sem limite
-	OrcamentoMicro int64    `json:"orcamento_micro"` // por mês; 0 = sem limite
-	Cache          bool     `json:"cache"`           // cache ligado por padrão para este cliente
+	RPM            int      `json:"rpm"`             // 0 = unlimited
+	OrcamentoMicro int64    `json:"orcamento_micro"` // per month; 0 = unlimited
+	Cache          bool     `json:"cache"`           // cache on by default for this client
 	LGPD           bool     `json:"lgpd"`
-	Modelos        []string `json:"modelos"` // aliases liberados; vazio = todos
+	Modelos        []string `json:"modelos"` // allowed aliases; empty = all
 }
 
 func (b *Banco) CriarCliente(ctx context.Context, c Cliente) (Cliente, error) {
@@ -99,7 +99,7 @@ func (b *Banco) CriarCliente(ctx context.Context, c Cliente) (Cliente, error) {
 		`INSERT INTO clientes (nome, rpm, orcamento_micro, cache, lgpd, modelos, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		c.Nome, c.RPM, c.OrcamentoMicro, c.Cache, c.LGPD, string(m), time.Now().Unix())
 	if err != nil {
-		return c, fmt.Errorf("criando cliente: %w", err)
+		return c, fmt.Errorf("creating client: %w", err)
 	}
 	c.ID, err = res.LastInsertId()
 	return c, err
@@ -110,18 +110,18 @@ func (b *Banco) AtualizarCliente(ctx context.Context, c Cliente) error {
 	res, err := b.db.ExecContext(ctx,
 		`UPDATE clientes SET nome = ?, rpm = ?, orcamento_micro = ?, cache = ?, lgpd = ?, modelos = ? WHERE id = ?`,
 		c.Nome, c.RPM, c.OrcamentoMicro, c.Cache, c.LGPD, string(m), c.ID)
-	return linhaAfetada(res, err, "atualizando cliente")
+	return linhaAfetada(res, err, "updating client")
 }
 
 func (b *Banco) RemoverCliente(ctx context.Context, id int64) error {
 	res, err := b.db.ExecContext(ctx, `DELETE FROM clientes WHERE id = ?`, id)
-	return linhaAfetada(res, err, "removendo cliente")
+	return linhaAfetada(res, err, "removing client")
 }
 
 func (b *Banco) ListarClientes(ctx context.Context) ([]Cliente, error) {
 	rows, err := b.db.QueryContext(ctx, `SELECT id, nome, rpm, orcamento_micro, cache, lgpd, modelos FROM clientes ORDER BY id`)
 	if err != nil {
-		return nil, fmt.Errorf("listando clientes: %w", err)
+		return nil, fmt.Errorf("listing clients: %w", err)
 	}
 	defer rows.Close()
 	out := []Cliente{}
@@ -145,24 +145,24 @@ type Chave struct {
 	RevogadaEm *time.Time `json:"revogada_em"`
 }
 
-// HashChave é o que fica no banco. SHA-256 sem sal basta aqui: a chave tem 128 bits
-// aleatórios, então não existe dicionário para atacar (diferente de uma senha).
+// HashChave is what goes into the database. Unsalted SHA-256 is enough here: the key has 128 random
+// bits, so there's no dictionary to attack (unlike a password).
 func HashChave(texto string) string {
 	h := sha256.Sum256([]byte(texto))
 	return hex.EncodeToString(h[:])
 }
 
-// CriarChave devolve o texto inteiro da chave uma única vez; depois disso só existe o hash.
+// CriarChave (create key) returns the full key text exactly once; after that only the hash exists.
 func (b *Banco) CriarChave(ctx context.Context, clienteID int64) (string, Chave, error) {
 	return b.registrarChave(ctx, clienteID, "ck_"+rand.Text())
 }
 
-// SemearDemo cria o cliente "demo" com a chave dada (a publicada no README da demo) quando o
-// banco não tem nenhum cliente, que é o estado da demo a cada vez que o disco efêmero zera.
-// Devolve se criou. A chave pública só é aceitável porque a demo usa o provedor falso.
+// SemearDemo (seed demo) creates the "demo" client with the given key (the one published in the demo's
+// README) when the database has no clients, which is the demo's state every time the ephemeral disk is
+// wiped. It returns whether it created it. A public key is only acceptable because the demo uses the fake provider.
 func (b *Banco) SemearDemo(ctx context.Context, chave string) (bool, error) {
 	if !strings.HasPrefix(chave, "ck_") {
-		return false, fmt.Errorf("chave da demo precisa começar com ck_")
+		return false, fmt.Errorf("the demo key must start with ck_")
 	}
 	var n int
 	if err := b.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM clientes`).Scan(&n); err != nil || n > 0 {
@@ -182,23 +182,23 @@ func (b *Banco) registrarChave(ctx context.Context, clienteID int64, texto strin
 	res, err := b.db.ExecContext(ctx, `INSERT INTO chaves (cliente_id, prefixo, hash, criada_em) VALUES (?, ?, ?, ?)`,
 		clienteID, k.Prefixo, HashChave(texto), agora.Unix())
 	if err != nil {
-		return "", k, fmt.Errorf("criando chave: %w", err)
+		return "", k, fmt.Errorf("creating key: %w", err)
 	}
 	k.ID, err = res.LastInsertId()
 	return texto, k, err
 }
 
-// RevogarChave só revoga a chave se ela for do cliente: o id do cliente vem do path do admin.
+// RevogarChave (revoke key) only revokes the key if it belongs to the client: the client id comes from the admin path.
 func (b *Banco) RevogarChave(ctx context.Context, clienteID, id int64) error {
 	res, err := b.db.ExecContext(ctx, `UPDATE chaves SET revogada_em = ? WHERE id = ? AND cliente_id = ? AND revogada_em IS NULL`,
 		time.Now().Unix(), id, clienteID)
-	return linhaAfetada(res, err, "revogando chave")
+	return linhaAfetada(res, err, "revoking key")
 }
 
 func (b *Banco) ListarChaves(ctx context.Context, clienteID int64) ([]Chave, error) {
 	rows, err := b.db.QueryContext(ctx, `SELECT id, cliente_id, prefixo, criada_em, revogada_em FROM chaves WHERE cliente_id = ? ORDER BY id`, clienteID)
 	if err != nil {
-		return nil, fmt.Errorf("listando chaves: %w", err)
+		return nil, fmt.Errorf("listing keys: %w", err)
 	}
 	defer rows.Close()
 	out := []Chave{}
@@ -219,12 +219,12 @@ func (b *Banco) ListarChaves(ctx context.Context, clienteID int64) ([]Chave, err
 	return out, rows.Err()
 }
 
-// ChavesAtivas devolve hash → cliente. O servidor guarda isso num snapshot em memória para
-// autenticar sem ir ao banco em toda requisição.
+// ChavesAtivas (active keys) returns hash → client. The server keeps this in an in-memory snapshot
+// to authenticate without hitting the database on every request.
 func (b *Banco) ChavesAtivas(ctx context.Context) (map[string]int64, error) {
 	rows, err := b.db.QueryContext(ctx, `SELECT hash, cliente_id FROM chaves WHERE revogada_em IS NULL`)
 	if err != nil {
-		return nil, fmt.Errorf("lendo chaves ativas: %w", err)
+		return nil, fmt.Errorf("reading active keys: %w", err)
 	}
 	defer rows.Close()
 	out := map[string]int64{}
