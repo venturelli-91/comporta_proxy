@@ -3,8 +3,8 @@ import { api, num, usd, type Comparacao, type Modelo, type Relatorio } from "../
 import { botao, cartao } from "../ui";
 import { Estado } from "./Estado";
 
-// Shadow: cada alias com sombra mostra o principal (que respondeu ao cliente) contra o
-// candidato (chamado em segundo plano), para decidir uma migração com números.
+// Shadow: each alias with a shadow shows the primary (which answered the client) against the
+// candidate (called in the background), to decide a migration with numbers.
 export default function Shadow() {
   const uso = useQuery({ queryKey: ["uso"], queryFn: () => api<Relatorio>("/admin/uso"), refetchInterval: 5000 });
   const modelos = useQuery({ queryKey: ["modelos"], queryFn: () => api<Modelo[]>("/admin/modelos") });
@@ -13,16 +13,16 @@ export default function Shadow() {
   if (comSombra.length === 0)
     return (
       <p className={`${cartao} max-w-xl p-5 text-sm text-suave`}>
-        Nenhum modelo com shadow no <code className="font-mono">comporta.json</code>. Adicione <code className="font-mono">"shadow"</code> a um alias
-        para comparar dois destinos sem afetar o usuário.
+        No model has a shadow in <code className="font-mono">comporta.json</code>. Add <code className="font-mono">"shadow"</code> to an alias
+        to compare two destinations without affecting the user.
       </p>
     );
 
   return (
     <div className="space-y-6">
       <p className="max-w-2xl text-sm text-suave">
-        O principal responde ao cliente; o candidato recebe a mesma chamada em segundo plano. A comparação ajuda a decidir uma migração de
-        modelo ou provedor com números, sem risco.
+        The primary answers the client; the candidate gets the same call in the background. The comparison helps decide a model or
+        provider migration with numbers, without risk.
       </p>
       {comSombra.map((m) => {
         const linhas = uso.data.shadow.filter((c) => c.modelo === m.alias);
@@ -35,14 +35,14 @@ export default function Shadow() {
                 {m.alias}
               </h2>
               <p className="text-sm text-suave">
-                <span className="font-mono">{m.destinos[0]}</span> responde · <span className="font-mono">{m.shadow}</span> em segundo plano
+                <span className="font-mono">{m.destinos[0]}</span> answers · <span className="font-mono">{m.shadow}</span> in the background
               </p>
             </header>
             {!principal || !sombra ? (
               <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-sm text-suave">
-                <span>Sem chamadas comparáveis nas últimas 24 horas.</span>
+                <span>No comparable calls in the last 24 hours.</span>
                 <a className={botao} href="#playground">
-                  Testar {m.alias} no Playground
+                  Try {m.alias} in the Playground
                 </a>
               </div>
             ) : (
@@ -50,18 +50,18 @@ export default function Shadow() {
                 <thead className="text-left text-suave">
                   <tr className="border-b border-borda">
                     <th className="px-5 py-2.5 font-medium">
-                      <span className="sr-only">Métrica</span>
+                      <span className="sr-only">Metric</span>
                     </th>
-                    <th className="px-5 py-2.5 text-right font-medium">Principal</th>
-                    <th className="px-5 py-2.5 text-right font-medium">Candidato</th>
-                    <th className="px-5 py-2.5 text-right font-medium">Diferença</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Primary</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Candidate</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Difference</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <Linha nome="Latência média" a={principal} b={sombra} v={(c) => c.latencia_media_ms} f={(n) => `${num(n)} ms`} menorMelhor />
-                  <Linha nome="Custo médio" a={principal} b={sombra} v={(c) => c.custo_medio_micro} f={usd} menorMelhor />
-                  <Linha nome="Tamanho médio da resposta" a={principal} b={sombra} v={(c) => c.tamanho_medio} f={(n) => `${num(n)} bytes`} />
-                  <Linha nome="Amostras" a={principal} b={sombra} v={(c) => c.requisicoes} f={num} semDiferenca />
+                  <Linha nome="Average latency" a={principal} b={sombra} v={(c) => c.latencia_media_ms} f={(n) => `${num(n)} ms`} menorMelhor />
+                  <Linha nome="Average cost" a={principal} b={sombra} v={(c) => c.custo_medio_micro} f={usd} menorMelhor />
+                  <Linha nome="Average response size" a={principal} b={sombra} v={(c) => c.tamanho_medio} f={(n) => `${num(n)} bytes`} />
+                  <Linha nome="Samples" a={principal} b={sombra} v={(c) => c.requisicoes} f={num} semDiferenca />
                 </tbody>
               </table>
             )}
@@ -72,8 +72,8 @@ export default function Shadow() {
   );
 }
 
-// menorMelhor pinta a diferença: verde (teal) quando o candidato ganha, vermelho quando perde.
-// Tamanho não é melhor nem pior, então fica neutro.
+// menorMelhor (lower is better) colors the difference: teal when the candidate wins, red when it loses.
+// Size is neither better nor worse, so it stays neutral.
 function Linha(p: {
   nome: string;
   a: Comparacao;

@@ -1,6 +1,6 @@
 import { useState, type ReactNode, type SVGProps } from "react";
 
-// Vocabulário visual único do painel: o mesmo botão, campo e cartão em todas as telas.
+// The dashboard's single visual vocabulary: the same button, field and card on every screen.
 export const campo =
   "mt-1 block w-full rounded-md border border-borda bg-superficie px-3 py-2 text-texto hover:border-suave/60 disabled:opacity-60";
 export const botao =
@@ -10,7 +10,7 @@ export const botaoSecundario =
 export const botaoTexto = "inline-flex items-center gap-1.5 rounded text-sm font-medium hover:underline underline-offset-4";
 export const cartao = "rounded-lg border border-borda bg-superficie shadow-cartao";
 
-// Selo de estado: cor + rótulo (o estado nunca depende só da cor).
+// State badge: color + label (state never depends on color alone).
 const tons = {
   ok: "bg-acento/12 text-acento ring-acento/25",
   alerta: "bg-alerta/12 text-alerta ring-alerta/25",
@@ -26,12 +26,12 @@ export function Selo({ tom, children }: { tom: keyof typeof tons; children: Reac
   );
 }
 
-// Esqueleto ocupa o lugar do conteúdo enquanto carrega: o layout não pula quando os dados chegam.
+// The skeleton takes the content's place while loading: the layout doesn't jump when the data arrives.
 export function Esqueleto({ className = "" }: { className?: string }) {
   return <div className={`animate-pulso rounded-md bg-borda/70 ${className}`} aria-hidden />;
 }
 
-// Ícones: traço de 1,75 px em 20×20, herdam a cor do texto. SVG inline para não puxar dependência.
+// Icons: 1.75 px stroke on 20×20, inheriting the text color. Inline SVG to avoid pulling in a dependency.
 function Icone({ children, ...p }: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="size-4.5 shrink-0" aria-hidden {...p}>
@@ -94,7 +94,7 @@ const IconeMonitor = () => (
   </Icone>
 );
 
-// Marca: a comporta (duas colunas e duas pranchas), a mesma do favicon.
+// Brand: the floodgate (two posts and two boards), the same as the favicon.
 export function Marca() {
   return (
     <span className="inline-flex items-center gap-2.5 text-base font-semibold tracking-tight">
@@ -107,13 +107,13 @@ export function Marca() {
   );
 }
 
-// Tema: sistema por padrão; a escolha manual fica no localStorage (lido também no index.html
-// antes da pintura). localStorage pode falhar (aba privada, bloqueio): aí só não lembra.
+// Theme: system by default; a manual choice is kept in localStorage (also read by index.html
+// before the first paint). localStorage can fail (private tab, blocked): then it just doesn't remember.
 type Tema = "claro" | "escuro" | "sistema";
 const opcoes: { tema: Tema; nome: string; icone: () => ReactNode }[] = [
-  { tema: "claro", nome: "Tema claro", icone: IconeSol },
-  { tema: "escuro", nome: "Tema escuro", icone: IconeLua },
-  { tema: "sistema", nome: "Tema do sistema", icone: IconeMonitor },
+  { tema: "claro", nome: "Light theme", icone: IconeSol },
+  { tema: "escuro", nome: "Dark theme", icone: IconeLua },
+  { tema: "sistema", nome: "System theme", icone: IconeMonitor },
 ];
 function lerTema(): Tema {
   try {
@@ -133,11 +133,11 @@ export function SeletorTema() {
       if (t === "sistema") localStorage.removeItem("tema");
       else localStorage.setItem("tema", t);
     } catch {
-      /* sem armazenamento: o tema vale só nesta visita */
+      /* no storage: the theme only lasts for this visit */
     }
   };
   return (
-    <div role="radiogroup" aria-label="Tema" className="inline-flex rounded-md border border-borda bg-superficie p-0.5">
+    <div role="radiogroup" aria-label="Theme" className="inline-flex rounded-md border border-borda bg-superficie p-0.5">
       {opcoes.map(({ tema: t, nome, icone: I }) => (
         <button
           key={t}

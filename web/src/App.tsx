@@ -9,9 +9,9 @@ import Visao from "./telas/Visao";
 import { botao, campo, cartao, IconeClientes, IconePlayground, IconeSair, IconeShadow, IconeVisao, Marca, SeletorTema } from "./ui";
 
 const telas = {
-  visao: { nome: "Visão geral", curto: "Visão", el: Visao, icone: IconeVisao },
-  clientes: { nome: "Clientes e chaves", curto: "Clientes", el: Clientes, icone: IconeClientes },
-  shadow: { nome: "Migração (shadow)", curto: "Shadow", el: Shadow, icone: IconeShadow },
+  visao: { nome: "Overview", curto: "Overview", el: Visao, icone: IconeVisao },
+  clientes: { nome: "Clients and keys", curto: "Clients", el: Clientes, icone: IconeClientes },
+  shadow: { nome: "Migration (shadow)", curto: "Shadow", el: Shadow, icone: IconeShadow },
   playground: { nome: "Playground", curto: "Playground", el: Playground, icone: IconePlayground },
 } as const;
 type Tela = keyof typeof telas;
@@ -22,7 +22,7 @@ const daHash = (): Tela => {
 };
 
 export default function App() {
-  // O v5 do TanStack Query não aceita undefined como dado; o 204 da sessão vira true.
+  // TanStack Query v5 doesn't accept undefined as data; the session's 204 becomes true.
   const sessao = useQuery({ queryKey: ["sessao"], queryFn: () => api<void>("/admin/sessao").then(() => true) });
   const [tela, setTela] = useState<Tela>(daHash);
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function App() {
     document.title = `${telas[tela].nome} · Comporta`;
   }, [tela]);
   if (sessao.isPending) return null;
-  // Só 401 é "sem sessão"; servidor fora do ar ou 500 mostram o erro, não um login que não resolveria.
+  // Only a 401 means "no session"; a server that is down or a 500 shows the error, not a login that wouldn't help.
   if (sessao.error instanceof ErroApi && sessao.error.status === 401) return <Login />;
   if (sessao.isError)
     return (
@@ -46,7 +46,7 @@ export default function App() {
   const Atual = telas[tela].el;
   return (
     <div className="min-h-screen md:grid md:grid-cols-[15rem_1fr]">
-      {/* Celular: barra de topo com marca, tema e sair; as seções vão para a barra de abas embaixo. */}
+      {/* Mobile: top bar with brand, theme and sign out; the sections go to the tab bar at the bottom. */}
       <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-borda bg-lateral/95 px-4 py-2.5 backdrop-blur md:hidden">
         <Marca />
         <div className="flex items-center gap-1">
@@ -56,7 +56,7 @@ export default function App() {
       </header>
       <nav
         className="fixed inset-x-0 bottom-0 z-20 border-t border-borda bg-lateral/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:sticky md:top-0 md:flex md:h-screen md:flex-col md:gap-4 md:border-t-0 md:border-r md:bg-lateral md:px-4 md:py-6 md:backdrop-blur-none"
-        aria-label="Seções"
+        aria-label="Sections"
       >
         <div className="hidden px-2 md:block">
           <Marca />
@@ -105,8 +105,8 @@ function Login() {
       await enviar("POST", "/admin/login", { token });
       qc.invalidateQueries({ queryKey: ["sessao"] });
     } catch (err) {
-      if (err instanceof ErroApi && err.status === 401) setErro("Token incorreto. Confira o ADMIN_TOKEN do servidor.");
-      else if (err instanceof ErroApi && err.status === 429) setErro("Muitas tentativas. Aguarde um minuto e tente de novo.");
+      if (err instanceof ErroApi && err.status === 401) setErro("Wrong token. Check the server's ADMIN_TOKEN.");
+      else if (err instanceof ErroApi && err.status === 429) setErro("Too many attempts. Wait a minute and try again.");
       else setErro(String(err));
     } finally {
       setEntrando(false);
@@ -121,11 +121,11 @@ function Login() {
         </div>
         <form onSubmit={entrar} className={`${cartao} space-y-5 p-6`}>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight">Entrar no painel</h1>
-            <p className="mt-1 text-sm text-suave">Acesso, custo e dados pessoais nas chamadas de IA, num lugar só.</p>
+            <h1 className="text-lg font-semibold tracking-tight">Sign in to the dashboard</h1>
+            <p className="mt-1 text-sm text-suave">Access, cost and personal data in your AI calls, in one place.</p>
           </div>
           <label className="block text-sm font-medium">
-            Token de admin
+            Admin token
             <input
               type="password"
               autoFocus
@@ -144,7 +144,7 @@ function Login() {
             </p>
           )}
           <button disabled={entrando} className={`${botao} w-full`}>
-            {entrando ? "Entrando…" : "Entrar"}
+            {entrando ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </div>
@@ -156,8 +156,8 @@ function BotaoSair({ rotulo }: { rotulo: boolean }) {
   const qc = useQueryClient();
   return (
     <button
-      aria-label="Sair"
-      title="Sair"
+      aria-label="Sign out"
+      title="Sign out"
       className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-suave hover:bg-realce hover:text-texto"
       onClick={async () => {
         await enviar("POST", "/admin/logout");
@@ -165,7 +165,7 @@ function BotaoSair({ rotulo }: { rotulo: boolean }) {
       }}
     >
       <IconeSair />
-      {rotulo && "Sair"}
+      {rotulo && "Sign out"}
     </button>
   );
 }

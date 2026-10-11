@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
-/* Tokens de .claude/docs/design/painel.md. Água: teal sobre cinza-esverdeado frio.
-   Tema: segue o sistema por padrão; data-tema="claro"|"escuro" no <html> (escolha do usuário) vence. */
+/* Tokens from .claude/docs/design/dashboard.md. Water: teal over cool grey-green.
+   Theme: follows the system by default; data-tema="claro"|"escuro" on <html> (the user's choice) wins. */
 :root {
   --fundo: #f3f5f4;
-  --lateral: #e9eeec; /* segunda camada neutra: navegação */
+  --lateral: #e9eeec; /* second neutral layer: navigation */
   --superficie: #ffffff;
-  --realce: #f7f9f8; /* hover de linhas e itens */
+  --realce: #f7f9f8; /* hover for rows and items */
   --texto: #14201d;
   --suave: #56655f;
   --borda: #dbe2df;
   --acento: #0f766e;
   --acento-claro: #99d5cc;
-  --sobre-acento: #ffffff; /* texto em cima do botão teal */
+  --sobre-acento: #ffffff; /* text on top of the teal button */
   --alerta: #a14a07;
   --erro: #b91c1c;
   --sombra: 0 1px 2px rgb(20 32 29 / 0.06), 0 1px 1px rgb(20 32 29 / 0.04);
@@ -78,7 +78,7 @@
   }
 }
 
-/* O Tailwind v4 tira o ponteiro dos botões; aqui volta para tudo que é clicável. */
+/* Tailwind v4 removes the pointer from buttons; this brings it back for everything clickable. */
 button,
 select,
 summary,

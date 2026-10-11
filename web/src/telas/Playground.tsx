@@ -3,8 +3,8 @@ import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, type Modelo } from "../api";
 import { botao, botaoSecundario, campo, cartao, Selo } from "../ui";
 
-// O gateway devolve em X-Comporta-Enviado (base64, UTF-8) a última mensagem como saiu para o
-// provedor, já mascarada. atob dá bytes "latin1"; TextDecoder remonta os acentos.
+// The gateway returns in X-Comporta-Enviado (base64, UTF-8) the last message as it went out to the
+// provider, already masked. atob yields "latin1" bytes; TextDecoder reassembles accented characters.
 function decodificar(b64: string | null): string | null {
   if (!b64) return null;
   try {
@@ -14,7 +14,7 @@ function decodificar(b64: string | null): string | null {
   }
 }
 
-// Realça os marcadores ([CPF_1], [EMAIL_2]...) que tomaram o lugar dos dados pessoais.
+// Highlights the placeholders ([CPF_1], [EMAIL_2]...) that took the place of personal data.
 function comMarcadores(texto: string): ReactNode[] {
   return texto.split(/(\[(?:CPF|CNPJ|CARTAO|EMAIL|TELEFONE)_\d+\])/).map((parte, i) =>
     i % 2 ? (
@@ -29,14 +29,14 @@ function comMarcadores(texto: string): ReactNode[] {
 
 type Info = { status?: string; ttft?: number; total?: number; entrada?: number; saida?: number; requestId?: string };
 
-// Playground chama a API pública como um cliente faria: com a chave ck_ colada aqui (que fica
-// só na memória do componente). fetch + ReadableStream porque EventSource não faz POST nem
-// manda Authorization.
+// Playground calls the public API the way a client would: with the ck_ key pasted here (it stays
+// only in the component's memory). fetch + ReadableStream because EventSource can't POST or
+// send Authorization.
 export default function Playground() {
   const modelos = useQuery({ queryKey: ["modelos"], queryFn: () => api<Modelo[]>("/admin/modelos") });
   const [chave, setChave] = useState("");
   const [modelo, setModelo] = useState("rapido");
-  const [texto, setTexto] = useState("Meu CPF é 529.982.247-25 e o e-mail ana@exemplo.com. Pode confirmar o cadastro?");
+  const [texto, setTexto] = useState("My CPF is 529.982.247-25 and my email is ana@example.com. Can you confirm my registration?");
   const [stream, setStream] = useState(true);
   const [cache, setCache] = useState(false);
   const [saida, setSaida] = useState("");
@@ -65,7 +65,7 @@ export default function Playground() {
           "Content-Type": "application/json",
           ...(cache ? { "X-Comporta-Cache": "ligado" } : {}),
         },
-        // include_usage: sem ele o gateway não repassa o chunk de uso no stream (como a OpenAI).
+        // include_usage: without it the gateway doesn't relay the usage chunk in the stream (like OpenAI).
         body: JSON.stringify({
           model: modelo,
           stream,
@@ -73,7 +73,7 @@ export default function Playground() {
           messages: [{ role: "user", content: texto }],
         }),
       });
-      setRespondeu(r.ok); // erro (chave inválida, limite) não diz nada sobre o LGPD da chave
+      setRespondeu(r.ok); // an error (invalid key, limit) says nothing about the key's LGPD setting
       setEnviado(decodificar(r.headers.get("X-Comporta-Enviado")));
       if (!r.ok) {
         const corpo = await r.json().catch(() => null);
@@ -123,7 +123,7 @@ export default function Playground() {
     <div className="grid items-start gap-6 2xl:grid-cols-[22rem_1fr]">
       <form onSubmit={enviar} className={`${cartao} space-y-4 p-5 text-sm`}>
         <label className="block font-medium">
-          Chave do cliente
+          Client key
           <input
             required
             type="password"
@@ -135,17 +135,17 @@ export default function Playground() {
           />
         </label>
         <label className="block font-medium">
-          Modelo
+          Model
           <select value={modelo} onChange={(e) => setModelo(e.target.value)} className={`${campo} font-normal`}>
             {modelos.data?.map((m) => (
               <option key={m.alias} value={m.alias}>
-                {m.alias} ({m.destinos[0]}){m.shadow ? " com shadow" : ""}
+                {m.alias} ({m.destinos[0]}){m.shadow ? " with shadow" : ""}
               </option>
             ))}
           </select>
         </label>
         <label className="block font-medium">
-          Mensagem
+          Message
           <textarea rows={5} value={texto} onChange={(e) => setTexto(e.target.value)} className={`${campo} font-normal`} />
         </label>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
@@ -153,16 +153,16 @@ export default function Playground() {
             <input type="checkbox" checked={stream} onChange={(e) => setStream(e.target.checked)} /> Stream
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={cache} onChange={(e) => setCache(e.target.checked)} /> Usar cache
+            <input type="checkbox" checked={cache} onChange={(e) => setCache(e.target.checked)} /> Use cache
           </label>
         </div>
         <div className="flex gap-3">
           <button disabled={rodando} className={`${botao} flex-1`}>
-            {rodando ? "Enviando…" : "Enviar"}
+            {rodando ? "Sending…" : "Send"}
           </button>
           {rodando && (
             <button type="button" className={botaoSecundario} onClick={() => abortar.current?.abort()}>
-              Cancelar
+              Cancel
             </button>
           )}
         </div>
@@ -171,22 +171,22 @@ export default function Playground() {
       <div className="space-y-4" aria-live="polite">
         <div className="grid gap-4 lg:grid-cols-2">
           <Painel
-            titulo="O que o provedor recebeu"
-            selo={enviado !== null ? <Selo tom="ok">dados mascarados</Selo> : respondeu ? <Selo tom="alerta">LGPD desligado nesta chave</Selo> : null}
+            titulo="What the provider received"
+            selo={enviado !== null ? <Selo tom="ok">data masked</Selo> : respondeu ? <Selo tom="alerta">LGPD off for this key</Selo> : null}
           >
             {enviado !== null ? (
               comMarcadores(enviado)
             ) : (
               <span className="text-suave">
                 {respondeu
-                  ? "Este cliente não mascara dados: a mensagem saiu como foi escrita. Ligue o LGPD em Clientes e chaves."
-                  : "Aqui aparece a mensagem como saiu para a IA, com CPF, e-mail e telefone trocados por marcadores."}
+                  ? "This client doesn't mask data: the message went out as written. Turn LGPD on in Clients and keys."
+                  : "This shows the message as it went out to the AI, with CPF, email and phone replaced by placeholders."}
               </span>
             )}
           </Painel>
-          <Painel titulo="O que voltou para você" selo={enviado !== null && saida ? <Selo tom="ok">dados restaurados</Selo> : null}>
+          <Painel titulo="What came back to you" selo={enviado !== null && saida ? <Selo tom="ok">data restored</Selo> : null}>
             {saida || (
-              <span className="text-suave">{rodando ? "Aguardando o primeiro token…" : "A resposta aparece aqui, token a token com o stream ligado."}</span>
+              <span className="text-suave">{rodando ? "Waiting for the first token…" : "The answer shows up here, token by token with streaming on."}</span>
             )}
           </Painel>
         </div>
@@ -216,9 +216,9 @@ function Metricas({ info }: { info: Info }) {
       </p>
     );
   const itens = [
-    info.ttft !== undefined && ["Primeiro token", `${info.ttft} ms`],
+    info.ttft !== undefined && ["First token", `${info.ttft} ms`],
     info.total !== undefined && ["Total", `${info.total} ms`],
-    info.entrada !== undefined && ["Tokens", `${info.entrada} entrada · ${info.saida} saída`],
+    info.entrada !== undefined && ["Tokens", `${info.entrada} in · ${info.saida} out`],
     info.requestId && ["Request", info.requestId],
   ].filter(Boolean) as [string, string][];
   if (!itens.length) return null;
