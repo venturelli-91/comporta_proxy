@@ -31,7 +31,7 @@ export default function Shadow() {
         return (
           <section key={m.alias} aria-labelledby={`s-${m.alias}`} className={`${cartao} max-w-3xl`}>
             <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-borda px-5 py-3">
-              <h2 id={`s-${m.alias}`} className="font-medium">
+              <h2 id={`s-${m.alias}`} className="font-mono text-[15px] font-semibold">
                 {m.alias}
               </h2>
               <p className="text-sm text-suave">
@@ -92,7 +92,7 @@ function Linha(p: {
       <td className="px-5 py-2.5">{p.nome}</td>
       <td className="px-5 py-2.5 text-right">{p.f(a)}</td>
       <td className="px-5 py-2.5 text-right">{p.f(b)}</td>
-      <td className={`px-5 py-2.5 text-right font-medium ${cor}`}>{p.semDiferenca ? "" : `${dif > 0 ? "+" : ""}${dif}%`}</td>
+      <td className={`px-5 py-2.5 text-right font-medium ${cor}`}>{p.semDiferenca ? "" : `${dif > 0 ? "↑ +" : dif < 0 ? "↓ " : ""}${dif}%`}</td>
     </tr>
   );
 }

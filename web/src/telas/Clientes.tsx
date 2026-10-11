@@ -11,20 +11,20 @@ export default function Clientes() {
   return (
     <div className="grid items-start gap-10 lg:grid-cols-[1fr_22rem]">
       <section aria-labelledby="lista">
-        <h2 id="lista" className="mb-3 font-medium">
+        <h2 id="lista" className="mb-3 text-[15px] font-semibold tracking-tight">
           Clients <span className="font-normal text-suave">({clientes.data.length})</span>
         </h2>
         {clientes.data.length === 0 ? (
-          <p className={`${cartao} p-5 text-sm text-suave`}>
+          <p className="border-y border-borda py-5 text-sm text-suave">
             No clients yet. Create the first one alongside: each application gets its own <code className="font-mono">ck_</code> key, with
             a limit and a budget.
           </p>
         ) : (
-          <ul className={`${cartao} divide-y divide-borda overflow-hidden`}>
+          <ul className="divide-y divide-borda border-y border-borda">
             {clientes.data.map((c) => (
               <li key={c.id}>
                 <button
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-realce"
+                  className="flex w-full items-center gap-3 px-2 py-3 text-left hover:bg-realce"
                   aria-expanded={aberto === c.id}
                   onClick={() => setAberto(aberto === c.id ? null : c.id)}
                 >
@@ -75,8 +75,8 @@ function NovoCliente() {
     criar.mutate();
   };
   return (
-    <section aria-labelledby="novo" className={`${cartao} p-5 lg:sticky lg:top-6`}>
-      <h2 id="novo" className="mb-4 font-medium">
+    <section aria-labelledby="novo" className={`${cartao} bg-lateral p-5 lg:sticky lg:top-6`}>
+      <h2 id="novo" className="mb-4 text-[15px] font-semibold tracking-tight">
         New client
       </h2>
       <form onSubmit={enviarForm} className="space-y-4 text-sm">
@@ -173,7 +173,7 @@ function Chaves({ cliente }: { cliente: Cliente }) {
   });
 
   return (
-    <div className="space-y-4 border-t border-borda bg-realce/60 px-4 py-4 pl-11 text-sm">
+    <div className="space-y-4 border-t border-borda bg-realce/60 px-2 py-4 pl-9 text-sm">
       {nova && (
         <div role="status" className="rounded-md border border-acento/40 bg-acento/8 p-3">
           <p className="mb-2 font-medium">Copy the key now: it won't be shown again.</p>
