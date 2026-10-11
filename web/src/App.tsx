@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ErroApi, enviar } from "./api";
 import Clientes from "./telas/Clientes";
+import { Estado } from "./telas/Estado";
 import Playground from "./telas/Playground";
 import Shadow from "./telas/Shadow";
 import Visao from "./telas/Visao";
@@ -33,7 +34,14 @@ export default function App() {
     document.title = `${telas[tela].nome} · Comporta`;
   }, [tela]);
   if (sessao.isPending) return null;
-  if (sessao.isError) return <Login />;
+  // Só 401 é "sem sessão"; servidor fora do ar ou 500 mostram o erro, não um login que não resolveria.
+  if (sessao.error instanceof ErroApi && sessao.error.status === 401) return <Login />;
+  if (sessao.isError)
+    return (
+      <main className="grid min-h-screen place-items-center px-4">
+        <Estado q={sessao} />
+      </main>
+    );
 
   const Atual = telas[tela].el;
   return (
