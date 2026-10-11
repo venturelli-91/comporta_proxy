@@ -14,11 +14,11 @@ function decodificar(b64: string | null): string | null {
   }
 }
 
-// Highlights the placeholders ([CPF_1], [EMAIL_2]...) that took the place of personal data.
+// Shows the placeholders ([CPF_1], [EMAIL_2]...) as ink seals over the personal data they replaced.
 function comMarcadores(texto: string): ReactNode[] {
   return texto.split(/(\[(?:CPF|CNPJ|CARTAO|EMAIL|TELEFONE)_\d+\])/).map((parte, i) =>
     i % 2 ? (
-      <mark key={i} className="rounded bg-acento/15 px-1 font-mono text-[0.92em] font-medium text-acento">
+      <mark key={i} className="rounded-sm bg-texto px-1.5 py-px font-mono text-[0.85em] font-medium text-fundo">
         {parte}
       </mark>
     ) : (
@@ -120,8 +120,8 @@ export default function Playground() {
   };
 
   return (
-    <div className="grid items-start gap-6 2xl:grid-cols-[22rem_1fr]">
-      <form onSubmit={enviar} className={`${cartao} space-y-4 p-5 text-sm`}>
+    <div className="grid items-start gap-8 xl:grid-cols-[20rem_1fr]">
+      <form onSubmit={enviar} className="space-y-4 text-sm">
         <label className="block font-medium">
           Client key
           <input
@@ -171,6 +171,8 @@ export default function Playground() {
       <div className="space-y-4" aria-live="polite">
         <div className="grid gap-4 lg:grid-cols-2">
           <Painel
+            rota="Comporta → provider"
+            fora
             titulo="What the provider received"
             selo={enviado !== null ? <Selo tom="ok">data masked</Selo> : respondeu ? <Selo tom="alerta">LGPD off for this key</Selo> : null}
           >
@@ -184,7 +186,7 @@ export default function Playground() {
               </span>
             )}
           </Painel>
-          <Painel titulo="What came back to you" selo={enviado !== null && saida ? <Selo tom="ok">data restored</Selo> : null}>
+          <Painel rota="Comporta → your app" titulo="What came back to you" selo={enviado !== null && saida ? <Selo tom="ok">data restored</Selo> : null}>
             {saida || (
               <span className="text-suave">{rodando ? "Waiting for the first token…" : "The answer shows up here, token by token with streaming on."}</span>
             )}
@@ -196,14 +198,18 @@ export default function Playground() {
   );
 }
 
-function Painel({ titulo, selo, children }: { titulo: string; selo: ReactNode; children: ReactNode }) {
+// Panel: "fora" marks the side outside the company (the provider), on the second neutral layer.
+function Painel({ rota, fora, titulo, selo, children }: { rota: string; fora?: boolean; titulo: string; selo: ReactNode; children: ReactNode }) {
   return (
-    <section className={`${cartao} flex flex-col`}>
-      <header className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-borda px-4 py-2.5">
-        <h2 className="whitespace-nowrap text-sm font-medium">{titulo}</h2>
+    <section className={`${cartao} flex flex-col ${fora ? "bg-lateral" : ""}`}>
+      <header className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-borda px-4 py-2.5">
+        <div>
+          <p className="font-mono text-xs text-suave">{rota}</p>
+          <h2 className="text-sm font-semibold whitespace-nowrap">{titulo}</h2>
+        </div>
         {selo}
       </header>
-      <div className="min-h-36 flex-1 whitespace-pre-wrap px-4 py-3 leading-relaxed">{children}</div>
+      <div className="min-h-36 flex-1 px-4 py-3 leading-relaxed whitespace-pre-wrap">{children}</div>
     </section>
   );
 }
@@ -223,11 +229,11 @@ function Metricas({ info }: { info: Info }) {
   ].filter(Boolean) as [string, string][];
   if (!itens.length) return null;
   return (
-    <dl className="flex flex-wrap gap-2 text-xs">
+    <dl className="flex flex-wrap gap-x-8 gap-y-2 border-t border-borda pt-3 text-sm">
       {itens.map(([rotulo, valor]) => (
-        <div key={rotulo} className="flex gap-1.5 rounded-md border border-borda bg-superficie px-2.5 py-1">
+        <div key={rotulo} className="flex items-baseline gap-2">
           <dt className="text-suave">{rotulo}</dt>
-          <dd className="font-medium">{valor}</dd>
+          <dd className={`font-medium ${rotulo === "Request" ? "font-mono text-xs" : ""}`}>{valor}</dd>
         </div>
       ))}
     </dl>
