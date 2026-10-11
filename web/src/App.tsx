@@ -158,7 +158,7 @@ function BotaoSair({ rotulo }: { rotulo: boolean }) {
     <button
       aria-label="Sign out"
       title="Sign out"
-      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-suave hover:bg-realce hover:text-texto"
+      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-suave hover:bg-realce hover:text-texto"
       onClick={async () => {
         await enviar("POST", "/admin/logout");
         qc.resetQueries({ queryKey: ["sessao"] });
