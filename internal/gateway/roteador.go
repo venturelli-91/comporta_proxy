@@ -19,24 +19,24 @@ import (
 )
 
 var (
-	// ErrSemDestino: todos os destinos do alias estão com o breaker aberto (vira 503).
-	ErrSemDestino = errors.New("nenhum destino disponível")
-	// ErrOcupado: o semáforo do alias ficou cheio além da espera curta (vira 429).
-	ErrOcupado = errors.New("modelo ocupado")
+	// ErrSemDestino: every destination of the alias has its breaker open (becomes 503).
+	ErrSemDestino = errors.New("no destination available")
+	// ErrOcupado: the alias's semaphore stayed full past the short wait (becomes 429).
+	ErrOcupado = errors.New("model busy")
 )
 
-// Roteador leva um alias ("rapido") até um provedor de verdade, protegendo cada destino com
-// circuit breaker e retry, e o alias inteiro com um semáforo abaixo do limite da conta.
+// Roteador (router) takes an alias ("rapido") to a real provider, protecting each destination with
+// a circuit breaker and retry, and the whole alias with a semaphore below the account's limit.
 //
-// O breaker é por cliente e destino. Compartilhado, qualquer falha que um cliente conseguisse
-// provocar (gerações que estouram o prazo, pedidos que fazem o provedor travar) abriria o
-// destino para todos. Isolado, cada cliente só derruba o próprio caminho, e o breaker pode
-// contar timeouts sem medo. O custo: com o provedor doente de verdade, cada cliente precisa
-// das próprias falhas para o breaker dele abrir.
+// The breaker is per client and destination. Shared, any failure a client could provoke
+// (generations that exceed the deadline, requests that make the provider hang) would open the
+// destination for everyone. Isolated, each client only takes down its own path, and the breaker can
+// count timeouts without fear. The cost: when the provider is really sick, each client needs
+// its own failures for its breaker to open.
 type Roteador struct {
 	cfg      *Config
 	clientes map[string]*provedor.Cliente
-	semaforo map[string]chan struct{} // por alias
+	semaforo map[string]chan struct{} // per alias
 
 	brMu     sync.Mutex
 	breakers map[chaveBreaker]*gobreaker.CircuitBreaker[*http.Response]
@@ -64,9 +64,9 @@ type chaveBreaker struct {
 	destino string
 }
 
-// breaker devolve (criando na primeira vez) o breaker do cliente para o destino.
-// ponytail: breakers de cliente removido ficam no mapa (clientes × destinos, IDs nunca reaproveitados).
-// Um Esquecer(cliente) chamado pelo admin resolve se isso crescer.
+// breaker returns (creating it the first time) the client's breaker for the destination.
+// ponytail: a removed client's breakers stay in the map (clients × destinations, IDs never reused).
+// An Esquecer(cliente) called by the admin solves it if this grows.
 func (r *Roteador) breaker(cliente int64, d Destino) *gobreaker.CircuitBreaker[*http.Response] {
 	k := chaveBreaker{cliente, d.String()}
 	r.brMu.Lock()
@@ -85,29 +85,29 @@ func novoBreaker(nome string) *gobreaker.CircuitBreaker[*http.Response] {
 		MaxRequests: 1,
 		Interval:    time.Minute,
 		Timeout:     10 * time.Second,
-		// Abre com metade das chamadas falhando, mas só depois de uma amostra mínima:
-		// uma falha isolada no começo não deve derrubar o destino.
+		// Opens with half the calls failing, but only after a minimum sample:
+		// a single early failure must not take the destination down.
 		ReadyToTrip: func(c gobreaker.Counts) bool {
 			return c.Requests >= 5 && c.TotalFailures*2 >= c.Requests
 		},
-		// Pedido malformado (400, 413, 422) não indica provedor doente.
+		// A malformed request (400, 413, 422) doesn't mean the provider is sick.
 		IsSuccessful: func(err error) bool { return err == nil || erroDoPedido(err) },
-		// Cliente que desistiu não diz nada sobre a saúde do provedor. Prazo estourado e corte
-		// do watchdog contam: como o breaker é do próprio cliente, ele só derruba o próprio caminho.
+		// A client that gave up says nothing about the provider's health. Exceeded deadlines and watchdog
+		// cuts do count: since the breaker belongs to the client, it only takes down its own path.
 		IsExcluded: func(err error) bool { return errors.Is(err, context.Canceled) },
 	})
 }
 
-// erroDoPedido: o provedor recusou o pedido em si; falharia igual em qualquer destino.
-// 401/402/403 ficam de fora de propósito: são problema da conta do gateway no provedor
-// (chave inválida, sem saldo) e o próximo destino pode atender.
+// erroDoPedido (request error): the provider rejected the request itself; it would fail the same way
+// on any destination. 401/402/403 are left out on purpose: they're a problem with the gateway's account
+// at the provider (invalid key, no balance) and the next destination may serve it.
 func erroDoPedido(err error) bool {
 	var e *provedor.ErroHTTP
 	return errors.As(err, &e) && (e.Status == 400 || e.Status == 413 || e.Status == 422)
 }
 
-// Chamar tenta os destinos do alias em ordem. Devolve a resposta 2xx aberta: quem chama lê o
-// corpo (stream ou não) e fecha; fechar o corpo também libera o semáforo.
+// Chamar (call) tries the alias's destinations in order. It returns the open 2xx response: the caller
+// reads the body (streaming or not) and closes it; closing the body also releases the semaphore.
 func (r *Roteador) Chamar(ctx context.Context, cliente int64, alias string, corpo map[string]json.RawMessage) (*http.Response, Destino, error) {
 	m, ok := r.cfg.Modelos[alias]
 	if !ok {
@@ -133,7 +133,7 @@ func (r *Roteador) Chamar(ctx context.Context, cliente int64, alias string, corp
 			return resp, d, nil
 		}
 		ultimo = err
-		// Pedido malformado falharia igual no próximo destino; contexto morto não tem para quem responder.
+		// A malformed request would fail the same way on the next destination; a dead context has nobody to answer.
 		if erroDoPedido(err) || ctx.Err() != nil {
 			break
 		}
@@ -145,14 +145,14 @@ func (r *Roteador) Chamar(ctx context.Context, cliente int64, alias string, corp
 	return nil, Destino{}, ultimo
 }
 
-// ChamarDestino chama um destino específico (usado também pelo modo shadow), com o retry
-// dentro do breaker: o breaker conta só o resultado final de cada chamada.
+// ChamarDestino calls a specific destination (also used by shadow mode), with the retry
+// inside the breaker: the breaker counts only the final result of each call.
 func (r *Roteador) ChamarDestino(ctx context.Context, cliente int64, d Destino, corpo map[string]json.RawMessage) (*http.Response, error) {
 	c := maps.Clone(corpo)
 	c["model"], _ = json.Marshal(d.Modelo)
 	b, err := json.Marshal(c)
 	if err != nil {
-		return nil, fmt.Errorf("codificando corpo: %w", err)
+		return nil, fmt.Errorf("encoding body: %w", err)
 	}
 	prov := r.clientes[d.Provedor]
 	return r.breaker(cliente, d).Execute(func() (*http.Response, error) {
@@ -167,12 +167,12 @@ func (r *Roteador) ChamarDestino(ctx context.Context, cliente int64, d Destino, 
 
 type EstadoDestino struct {
 	Destino string `json:"destino"`
-	Breaker string `json:"breaker"` // pior estado entre os clientes
-	Abertos int    `json:"abertos"` // clientes com o breaker não fechado
+	Breaker string `json:"breaker"` // worst state across clients
+	Abertos int    `json:"abertos"` // clients whose breaker isn't closed
 }
 
-// Estado resume os breakers por destino, em ordem alfabética, para o painel.
-// ponytail: sem ocupação do semáforo; entra junto com as métricas Prometheus.
+// Estado (state) summarizes the breakers per destination, alphabetically, for the dashboard.
+// ponytail: no semaphore occupancy; it comes in together with Prometheus metrics.
 func (r *Roteador) Estado() []EstadoDestino {
 	por := map[string]*EstadoDestino{}
 	for _, m := range r.cfg.Modelos {
@@ -199,7 +199,7 @@ func (r *Roteador) Estado() []EstadoDestino {
 	return out
 }
 
-// corpoComFim roda `fim` uma vez quando o corpo é fechado.
+// corpoComFim runs `fim` once when the body is closed.
 type corpoComFim struct {
 	io.ReadCloser
 	fim func()

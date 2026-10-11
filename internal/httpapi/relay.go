@@ -16,11 +16,11 @@ import (
 	"github.com/venturelli-91/comporta_proxy/internal/lgpd"
 )
 
-var errTimeout = errors.New("provedor sem progresso")
+var errTimeout = errors.New("provider made no progress")
 
-// vigia é o watchdog do stream: se passar o prazo sem um "data:" chegar, cancela o contexto
-// da chamada com errTimeout. Começa a contar antes do provedor mandar os cabeçalhos, então
-// cobre também o provedor que aceita a conexão e trava. Keep-alive (": ...") não conta.
+// vigia is the stream's watchdog: if the deadline passes without a "data:" arriving, it cancels the
+// call's context with errTimeout. It starts counting before the provider sends headers, so it also
+// covers a provider that accepts the connection and hangs. Keep-alives (": ...") don't count.
 type vigia struct {
 	r     io.Reader
 	t     *time.Timer
@@ -41,7 +41,7 @@ func (v *vigia) Read(p []byte) (int, error) {
 
 func (v *vigia) parar() { v.t.Stop() }
 
-// causa traduz o erro de leitura no motivo real: prazo do vigia, cliente que saiu ou falha.
+// causa translates a read error into the real reason: the watchdog's deadline, a client that left, or a failure.
 func causa(ctx context.Context, err error) error {
 	if c := context.Cause(ctx); c != nil {
 		return c
@@ -49,14 +49,14 @@ func causa(ctx context.Context, err error) error {
 	return err
 }
 
-// relaySSE lê o stream (ao vivo ou do cache) linha a linha e repassa cada evento com flush,
-// para o primeiro token chegar ao cliente sem atraso. No caminho: ignora keep-alive, restaura
-// dados pessoais (com buffer para marcador partido), captura o usage e só repassa o chunk de
-// usage se o cliente pediu. Os cabeçalhos só saem no primeiro dado útil: até lá ainda dá
-// para responder um erro de verdade (504) em vez de um stream vazio.
+// relaySSE reads the stream (live or from the cache) line by line and relays each event with a flush,
+// so the first token reaches the client without delay. Along the way: ignores keep-alives, restores
+// personal data (with a buffer for split placeholders), captures the usage and only relays the usage
+// chunk if the client asked for it. Headers only go out on the first useful data: until then a real
+// error (504) can still be returned instead of an empty stream.
 func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io.Reader, p *pedido) (gateway.Uso, error) {
-	// Um restaurador por campo do delta: content e reasoning_content (raciocínio da DeepSeek) são
-	// textos independentes, e um marcador pode chegar partido em cada um.
+	// One restorer per delta field: content and reasoning_content (DeepSeek's reasoning) are
+	// independent texts, and a placeholder can arrive split in either one.
 	var sts map[string]*lgpd.Stream
 	if p.mapa.Len() > 0 {
 		sts = map[string]*lgpd.Stream{"content": p.mapa.NovoStream(), "reasoning_content": p.mapa.NovoStream()}
@@ -76,12 +76,12 @@ func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io
 			err = rc.Flush()
 		}
 		if err != nil {
-			// Escrita que falha no meio do stream = o cliente foi embora.
-			return fmt.Errorf("cliente desconectou: %w", context.Canceled)
+			// A write failing mid-stream = the client went away.
+			return fmt.Errorf("client disconnected: %w", context.Canceled)
 		}
 		return nil
 	}
-	// O que ficou retido no restaurador sai num chunk extra antes do [DONE].
+	// Whatever the restorer held back goes out in an extra chunk before [DONE].
 	soltarResto := func() error {
 		delta := map[string]string{}
 		for campo, st := range sts {
@@ -102,7 +102,7 @@ func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io
 	for sc.Scan() {
 		dado, eh := bytes.CutPrefix(sc.Bytes(), []byte("data:"))
 		if !eh {
-			continue // keep-alive, comentário ou separador
+			continue // keep-alive, comment or separator
 		}
 		dado = bytes.TrimSpace(dado)
 		if bytes.Equal(dado, []byte("[DONE]")) {
@@ -115,7 +115,7 @@ func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io
 			continue
 		}
 		p.chunks++
-		// Só o chunk com usage é decodificado para isso; os demais seguem como bytes.
+		// Only the chunk with usage is decoded for it; the others pass through as bytes.
 		if bytes.Contains(dado, []byte(`"usage"`)) {
 			var v struct {
 				Usage   *gateway.Uso
@@ -123,8 +123,8 @@ func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io
 			}
 			if json.Unmarshal(dado, &v) == nil && v.Usage != nil {
 				uso = *v.Usage
-				// O gateway pede include_usage para medir custo; o cliente que não pediu não
-				// recebe o chunk sem choices (o laço chunk.choices[0] dos SDKs quebraria).
+				// The gateway asks for include_usage to measure cost; a client that didn't ask doesn't
+				// get the chunk without choices (the SDKs' chunk.choices[0] loop would break).
 				if len(v.Choices) == 0 && !p.pediuUso {
 					continue
 				}
@@ -146,12 +146,12 @@ func (s *Servidor) relaySSE(ctx context.Context, w http.ResponseWriter, corpo io
 	return uso, soltarResto()
 }
 
-// restaurarChunk troca os marcadores nos campos de texto do delta de um chunk.
-// ponytail: um restaurador para todas as choices; com n > 1 seria um por índice.
+// restaurarChunk replaces the placeholders in the text fields of a chunk's delta.
+// ponytail: one restorer for all choices; with n > 1 it would be one per index.
 func restaurarChunk(dado []byte, sts map[string]*lgpd.Stream) []byte {
 	var v map[string]any
 	d := json.NewDecoder(bytes.NewReader(dado))
-	d.UseNumber() // não transformar ids e timestamps em float
+	d.UseNumber() // don't turn ids and timestamps into floats
 	if d.Decode(&v) != nil {
 		return dado
 	}
@@ -164,8 +164,8 @@ func restaurarChunk(dado []byte, sts map[string]*lgpd.Stream) []byte {
 				delta[campo] = st.Escrever(t)
 			}
 		}
-		// A resposta começou: o raciocínio acabou. O que ficou retido no restaurador (um "[" sem
-		// "]") sai neste chunk, antes do content, em vez de no chunk extra do fim.
+		// The answer has started: the reasoning is over. Whatever the restorer held back (a "[" without
+		// "]") goes out in this chunk, before the content, instead of in the extra chunk at the end.
 		if _, ok := delta["content"].(string); ok {
 			if resto := sts["reasoning_content"].Finalizar(); resto != "" {
 				r, _ := delta["reasoning_content"].(string)
@@ -180,7 +180,7 @@ func restaurarChunk(dado []byte, sts map[string]*lgpd.Stream) []byte {
 	return b
 }
 
-// usoDe extrai o usage de uma resposta inteira: o JSON, ou o último chunk do stream que o tiver.
+// usoDe extracts the usage from a whole response: the JSON, or the last stream chunk that has it.
 func usoDe(b []byte, stream bool) gateway.Uso {
 	var v struct{ Usage *gateway.Uso }
 	if !stream {
@@ -200,10 +200,10 @@ func usoDe(b []byte, stream bool) gateway.Uso {
 	return uso
 }
 
-// mascararMensagens troca os dados pessoais de messages[].content (texto) por marcadores.
-// Todas as mensagens são mascaradas juntas para um marcador literal de uma não colidir com
-// o dado real de outra.
-// ponytail: content em partes (multimodal) passa sem máscara; tratar quando houver cliente usando.
+// mascararMensagens replaces the personal data in messages[].content (text) with placeholders.
+// All messages are masked together so a literal placeholder in one can't collide with real data
+// in another.
+// ponytail: multipart (multimodal) content passes unmasked; handle it when a client uses it.
 func mascararMensagens(corpo map[string]json.RawMessage, mapa *lgpd.Mapa) error {
 	var msgs []map[string]json.RawMessage
 	if err := json.Unmarshal(corpo["messages"], &msgs); err != nil {
@@ -225,10 +225,10 @@ func mascararMensagens(corpo map[string]json.RawMessage, mapa *lgpd.Mapa) error 
 	return err
 }
 
-// ultimaDoUsuario devolve o texto da última mensagem "user" (até 2 KB, sem partir um caractere).
+// ultimaDoUsuario returns the text of the last "user" message (up to 2 KB, without splitting a character).
 func ultimaDoUsuario(corpo map[string]json.RawMessage) string {
 	var msgs []struct{ Role, Content string }
-	_ = json.Unmarshal(corpo["messages"], &msgs) // content em partes (multimodal) fica vazio
+	_ = json.Unmarshal(corpo["messages"], &msgs) // multipart (multimodal) content stays empty
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if t := msgs[i].Content; msgs[i].Role == "user" && t != "" {
 			if len(t) > 2048 {

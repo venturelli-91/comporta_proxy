@@ -1,6 +1,7 @@
-// Package lgpd troca dados pessoais brasileiros por marcadores antes de o texto sair para o
-// provedor, e devolve os valores reais na resposta. É redução de risco, não garantia de
-// conformidade: nomes e endereços não têm formato fixo e não são detectados.
+// Package lgpd replaces Brazilian personal data with placeholders before the text leaves for the
+// provider, and puts the real values back in the response (LGPD is Brazil's data protection law).
+// It's risk reduction, not a compliance guarantee: names and addresses have no fixed format and
+// aren't detected.
 package lgpd
 
 import (
@@ -12,11 +13,11 @@ import (
 type tipo struct {
 	nome   string
 	re     *regexp.Regexp
-	valido func(digitos string) bool // nil = o formato basta
+	valido func(digitos string) bool // nil = the format is enough
 }
 
-// A ordem importa: CNPJ e CPF antes do cartão e do telefone, porque um CPF sem pontuação
-// também tem cara de telefone; os validados por dígito verificador ganham a disputa.
+// Order matters: CNPJ and CPF (Brazilian company and individual taxpayer IDs) before card and phone,
+// because a CPF without punctuation also looks like a phone number; the check-digit-validated ones win.
 var tipos = []tipo{
 	{"CNPJ", regexp.MustCompile(`\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}`), cnpjValido},
 	{"CPF", regexp.MustCompile(`\d{3}\.?\d{3}\.?\d{3}-?\d{2}`), cpfValido},
@@ -25,10 +26,10 @@ var tipos = []tipo{
 	{"TELEFONE", regexp.MustCompile(`(?:\+55\s?)?(?:\([1-9]{2}\)|[1-9]{2})\s?(?:9\d{4}|[2-5]\d{3})[-\s]?\d{4}`), nil},
 }
 
-// Mapa vive só durante uma requisição: nunca vai para log, cache ou banco.
+// Mapa (map) lives only during a request: it never goes to logs, cache or the database.
 type Mapa struct {
-	porValor map[string]string // tipo+valor → marcador
-	valores  map[string]string // marcador → valor
+	porValor map[string]string // type+value → placeholder
+	valores  map[string]string // placeholder → value
 	cont     map[string]int
 }
 
@@ -36,15 +37,15 @@ func NovoMapa() *Mapa {
 	return &Mapa{porValor: map[string]string{}, valores: map[string]string{}, cont: map[string]int{}}
 }
 
-// Len diz quantos valores distintos foram mascarados (para a métrica do painel).
+// Len says how many distinct values were masked (for the dashboard metric).
 func (m *Mapa) Len() int { return len(m.valores) }
 
-// Mascarar é determinístico: o mesmo texto gera sempre o mesmo resultado, o que preserva o
-// cache do gateway e o cache de prefixo da DeepSeek.
+// Mascarar (mask) is deterministic: the same text always produces the same result, which preserves
+// the gateway cache and DeepSeek's prefix cache.
 func (m *Mapa) Mascarar(s string) string { return m.mascarar(s, s) }
 
-// MascararVarios mascara as mensagens de uma requisição. Os marcadores evitam o texto de
-// todas elas: um "[CPF_1]" literal numa mensagem não pode virar o marcador do CPF de outra.
+// MascararVarios masks the messages of a request. Placeholders avoid the text of all of them:
+// a literal "[CPF_1]" in one message can't become the placeholder for another message's CPF.
 func (m *Mapa) MascararVarios(textos []string) []string {
 	todos := strings.Join(textos, "\x00")
 	out := make([]string, len(textos))
@@ -72,7 +73,7 @@ func (m *Mapa) substituir(texto, original string, t tipo) string {
 	for _, p := range idx {
 		i, j := p[0], p[1]
 		v := texto[i:j]
-		// Pedaço de um número maior (protocolo, código de barras) não é dado pessoal.
+		// A piece of a bigger number (protocol number, barcode) isn't personal data.
 		if (i > 0 && ehDigito(texto[i-1])) || (j < len(texto) && ehDigito(texto[j])) {
 			continue
 		}
@@ -87,9 +88,9 @@ func (m *Mapa) substituir(texto, original string, t tipo) string {
 	return b.String()
 }
 
-// marcador reaproveita o marcador do mesmo valor e nunca usa um texto que o usuário já
-// escreveu: se a entrada contém "[CPF_1]" literal, o CPF real vira "[CPF_2]". Assim restaurar
-// nunca troca algo que o usuário digitou.
+// marcador reuses the placeholder for the same value and never uses text the user already wrote:
+// if the input contains a literal "[CPF_1]", the real CPF becomes "[CPF_2]". That way restoring
+// never replaces something the user typed.
 func (m *Mapa) marcador(nome, valor, original string) string {
 	chave := nome + "\x00" + valor
 	if mk, ok := m.porValor[chave]; ok {
@@ -116,7 +117,7 @@ func (m *Mapa) replacer() *strings.Replacer {
 	return strings.NewReplacer(pares...)
 }
 
-// Restaurar troca só os marcadores criados nesta requisição; qualquer outro "[X_n]" fica.
+// Restaurar (restore) only replaces placeholders created in this request; any other "[X_n]" stays.
 func (m *Mapa) Restaurar(s string) string {
 	if len(m.valores) == 0 {
 		return s
@@ -124,9 +125,9 @@ func (m *Mapa) Restaurar(s string) string {
 	return m.replacer().Replace(s)
 }
 
-// Stream restaura uma resposta que chega em pedaços. Um marcador pode vir partido
-// ("[CP" + "F_1]"), então segura o trecho a partir do último "[" enquanto ele ainda
-// pode ser o começo de um marcador.
+// Stream restores a response that arrives in chunks. A placeholder can arrive split
+// ("[CP" + "F_1]"), so it holds back the part from the last "[" while it can still be
+// the start of a placeholder.
 type Stream struct {
 	r   *strings.Replacer
 	max int
@@ -197,7 +198,7 @@ func cnpjValido(d string) bool {
 	return dvCNPJ(d[:12]) == d[12] && dvCNPJ(d[:13]) == d[13]
 }
 
-// dvCNPJ usa os pesos 2..9 repetidos da direita para a esquerda.
+// dvCNPJ uses the weights 2..9 repeated from right to left.
 func dvCNPJ(d string) byte {
 	soma, peso := 0, 2
 	for i := len(d) - 1; i >= 0; i-- {

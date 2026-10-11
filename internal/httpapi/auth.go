@@ -17,9 +17,9 @@ import (
 	"github.com/venturelli-91/comporta_proxy/internal/armazenamento"
 )
 
-// autenticar troca "Bearer ck_..." pelo cliente. A busca é pelo hash SHA-256 no mapa do
-// snapshot: quem tenta adivinhar não controla o hash, então o tempo da busca não vaza
-// nada útil sobre a chave (por isso aqui não precisa de ConstantTimeCompare).
+// autenticar exchanges "Bearer ck_..." for the client. The lookup is by SHA-256 hash in the snapshot's
+// map: whoever is guessing doesn't control the hash, so the lookup time leaks nothing useful about
+// the key (which is why ConstantTimeCompare isn't needed here).
 func (s *Servidor) autenticar(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		texto, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -27,7 +27,7 @@ func (s *Servidor) autenticar(h http.HandlerFunc) http.HandlerFunc {
 		id, achou := sn.chaves[armazenamento.HashChave(texto)]
 		cli, existe := sn.clientes[id]
 		if !ok || !strings.HasPrefix(texto, "ck_") || !achou || !existe {
-			erro(w, http.StatusUnauthorized, "chave_invalida", "chave de API ausente ou inválida")
+			erro(w, http.StatusUnauthorized, "chave_invalida", "missing or invalid API key")
 			return
 		}
 		h(w, r.WithContext(context.WithValue(r.Context(), ctxCliente, cli)))
@@ -38,17 +38,17 @@ func clienteDe(ctx context.Context) armazenamento.Cliente {
 	return ctx.Value(ctxCliente).(armazenamento.Cliente)
 }
 
-// permitir aplica o token bucket do cliente. Devolve quanto esperar quando passou do limite.
-// O limitador é recriado quando o admin muda o RPM.
-// ponytail: cliente removido deixa o limitador no mapa (um por cliente já criado; o AUTOINCREMENT
-// impede um cliente novo de herdá-lo). Apagar em removerCliente se o número de clientes explodir.
+// permitir (allow) applies the client's token bucket. It returns how long to wait when over the limit.
+// The limiter is recreated when the admin changes the RPM.
+// ponytail: a removed client leaves its limiter in the map (one per client ever created; AUTOINCREMENT
+// keeps a new client from inheriting it). Delete it in removerCliente if the number of clients explodes.
 func (s *Servidor) permitir(cli armazenamento.Cliente) (bool, time.Duration) {
 	if cli.RPM <= 0 {
 		return true, 0
 	}
 	s.limMu.Lock()
 	l, ok := s.limites[cli.ID]
-	if !ok || l.Burst() != cli.RPM { // o burst é o próprio RPM: se mudou no admin, recria
+	if !ok || l.Burst() != cli.RPM { // the burst is the RPM itself: if the admin changed it, recreate
 		l = rate.NewLimiter(rate.Limit(float64(cli.RPM)/60), cli.RPM)
 		s.limites[cli.ID] = l
 	}
@@ -61,8 +61,8 @@ func (s *Servidor) permitir(cli armazenamento.Cliente) (bool, time.Duration) {
 	return true, 0
 }
 
-// ocupar reserva uma das vagas simultâneas do cliente; soltar devolve.
-// ponytail: limite único para todos os clientes; vira coluna do cliente quando algum precisar de mais.
+// ocupar takes one of the client's concurrent slots; soltar gives it back.
+// ponytail: the same limit for every client; it becomes a client column when someone needs more.
 func (s *Servidor) ocupar(cliente int64) bool {
 	s.limMu.Lock()
 	defer s.limMu.Unlock()
@@ -85,7 +85,7 @@ func retryAfter(w http.ResponseWriter, d time.Duration) {
 	w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(d.Seconds()))))
 }
 
-// orcamentoEsgotado compara o gasto do mês (em memória) com o limite do cliente.
+// orcamentoEsgotado (budget exhausted) compares the month's spend (in memory) with the client's limit.
 func (s *Servidor) orcamentoEsgotado(cli armazenamento.Cliente) bool {
 	if cli.OrcamentoMicro <= 0 {
 		return false
@@ -106,7 +106,7 @@ func (s *Servidor) gastar(cliente, micro int64) {
 	s.gasto[cliente] += micro
 }
 
-// virarMes zera o gasto quando o mês (UTC) muda. Chamar com gastoMu travado.
+// virarMes resets the spend when the (UTC) month changes. Call with gastoMu held.
 func (s *Servidor) virarMes() {
 	if mes := time.Now().UTC().Format("2006-01"); mes != s.gastoMes {
 		s.gastoMes, s.gasto = mes, map[int64]int64{}
@@ -118,9 +118,9 @@ const (
 	duracaoSessao = 12 * time.Hour
 )
 
-// Sessões do painel: o cookie leva um valor aleatório e o servidor guarda só o SHA-256 dele,
-// com a validade. Logout apaga a sessão, então um cookie copiado deixa de valer na hora.
-// ponytail: sessões em memória (somem no restart, um login a mais); Redis quando houver várias instâncias.
+// Dashboard sessions: the cookie carries a random value and the server keeps only its SHA-256,
+// with the expiry. Logout deletes the session, so a copied cookie stops working immediately.
+// ponytail: in-memory sessions (lost on restart, one extra login); Redis when there are several instances.
 func hashSessao(v string) string {
 	h := sha256.Sum256([]byte(v))
 	return hex.EncodeToString(h[:])
@@ -131,7 +131,7 @@ func (s *Servidor) novaSessao() string {
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	agora := time.Now()
-	for k, expira := range s.sessoes { // aproveita para limpar as vencidas
+	for k, expira := range s.sessoes { // clean up the expired ones while we're here
 		if agora.After(expira) {
 			delete(s.sessoes, k)
 		}
@@ -164,7 +164,7 @@ func (s *Servidor) admin(h http.HandlerFunc) http.HandlerFunc {
 			ok = s.sessaoValida(c.Value)
 		}
 		if !ok {
-			erro(w, http.StatusUnauthorized, "nao_autorizado", "login de admin necessário")
+			erro(w, http.StatusUnauthorized, "nao_autorizado", "admin login required")
 			return
 		}
 		h(w, r)

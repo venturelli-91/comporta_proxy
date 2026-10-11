@@ -22,7 +22,7 @@ func corpoChat() map[string]json.RawMessage {
 	}
 }
 
-// novoCenario sobe um servidor HTTP por provedor e um roteador com o alias "rapido" → [a, b].
+// novoCenario starts one HTTP server per provider and a router with the alias "rapido" → [a, b].
 func novoCenario(t *testing.T, a, b http.Handler, concorrencia int) *Roteador {
 	t.Helper()
 	cfg := &Config{
@@ -61,27 +61,27 @@ func TestFallbackQuandoPrincipalFalha(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d.Provedor != "b" || d.Modelo != "modelo-b" {
-		t.Fatalf("destino = %v, queria b/modelo-b", d)
+		t.Fatalf("destination = %v, want b/modelo-b", d)
 	}
 	if a.Chamadas.Load() != 3 {
-		t.Errorf("principal recebeu %d chamadas, queria 3 (1 + 2 retries)", a.Chamadas.Load())
+		t.Errorf("primary got %d calls, want 3 (1 + 2 retries)", a.Chamadas.Load())
 	}
 }
 
 func TestErroDoClienteNaoFazFallback(t *testing.T) {
 	a := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":{"message":"parâmetro inválido"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid parameter"}}`))
 	})
 	b := &provedor.Falso{}
 	r := novoCenario(t, a, b, 10)
 	_, err := chamar(t, r)
 	var e *provedor.ErroHTTP
 	if !errors.As(err, &e) || e.Status != 400 {
-		t.Fatalf("erro = %v, queria 400 do provedor", err)
+		t.Fatalf("error = %v, want the provider's 400", err)
 	}
 	if b.Chamadas.Load() != 0 {
-		t.Fatal("400 é erro do cliente: não devia tentar o fallback")
+		t.Fatal("400 is a client error: it should not try the fallback")
 	}
 }
 
@@ -98,10 +98,10 @@ func TestBreakerAbreEPulaODestino(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a.Chamadas.Load() != antes {
-		t.Fatal("com o breaker aberto, o principal não devia ser chamado")
+		t.Fatal("with the breaker open, the primary should not be called")
 	}
 	if e := r.Estado(); e[0].Destino != "a/modelo-a" || e[0].Breaker != "open" {
-		t.Fatalf("estado = %+v", e)
+		t.Fatalf("state = %+v", e)
 	}
 }
 
@@ -112,11 +112,11 @@ func TestSemDestinoQuandoTodosOsBreakersAbrem(t *testing.T) {
 		_, err = chamar(t, r)
 	}
 	if !errors.Is(err, ErrSemDestino) {
-		t.Fatalf("erro = %v, queria ErrSemDestino", err)
+		t.Fatalf("error = %v, want ErrSemDestino", err)
 	}
 }
 
-// contaConcorrencia mede quantas requisições o provedor atende ao mesmo tempo.
+// contaConcorrencia measures how many requests the provider serves at the same time.
 type contaConcorrencia struct {
 	agora, maximo atomic.Int64
 	h             http.Handler
@@ -147,7 +147,7 @@ func TestSemaforoNuncaPassaDoLimite(t *testing.T) {
 	}
 	wg.Wait()
 	if m := a.maximo.Load(); m > 2 {
-		t.Fatalf("concorrência máxima = %d, limite 2", m)
+		t.Fatalf("max concurrency = %d, limit 2", m)
 	}
 }
 
@@ -157,15 +157,15 @@ func TestSemaforoCheioDevolveOcupado(t *testing.T) {
 	go func() { _, _ = chamar(t, r) }()
 	time.Sleep(50 * time.Millisecond)
 	if _, err := chamar(t, r); !errors.Is(err, ErrOcupado) {
-		t.Fatalf("erro = %v, queria ErrOcupado", err)
+		t.Fatalf("error = %v, want ErrOcupado", err)
 	}
 }
 
-// Um provedor que trava em toda chamada é o caso clássico do breaker: o corte do watchdog
-// (cancelamento com causa própria) conta como falha.
+// A provider that hangs on every call is the breaker's classic case: the watchdog's cut
+// (a cancellation with its own cause) counts as a failure.
 func TestBreakerContaWatchdog(t *testing.T) {
 	trava := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body) // sem ler o corpo o servidor não percebe a desconexão
+		_, _ = io.Copy(io.Discard, r.Body) // without reading the body the server doesn't notice the disconnect
 		<-r.Context().Done()
 	})
 	r := novoCenario(t, trava, &provedor.Falso{}, 10)
@@ -178,16 +178,16 @@ func TestBreakerContaWatchdog(t *testing.T) {
 		cancel(nil)
 	}
 	if e := r.Estado(); e[0].Breaker != "open" {
-		t.Fatalf("breaker = %+v, queria aberto depois de 5 cortes do watchdog", e)
+		t.Fatalf("breaker = %+v, want open after 5 watchdog cuts", e)
 	}
 }
 
-// contaETrava conta as chamadas recebidas e nunca responde.
+// contaETrava counts the calls it receives and never answers.
 type contaETrava struct{ n atomic.Int64 }
 
 func (c *contaETrava) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.n.Add(1)
-	_, _ = io.Copy(io.Discard, r.Body) // sem ler o corpo o servidor não percebe a desconexão
+	_, _ = io.Copy(io.Discard, r.Body) // without reading the body the server doesn't notice the disconnect
 	<-r.Context().Done()
 }
 
@@ -199,9 +199,9 @@ func chamarComPrazo(r *Roteador, cliente int64) {
 	}
 }
 
-// O breaker é por cliente e destino: um provedor travado abre o breaker de quem sofreu os
-// timeouts (prazo estourado conta como falha), mas um cliente não consegue derrubar o
-// destino para os outros mandando pedidos que estouram o prazo de propósito.
+// The breaker is per client and destination: a hung provider opens the breaker of whoever suffered
+// the timeouts (an exceeded deadline counts as a failure), but one client can't take the destination
+// down for the others by sending requests that exceed the deadline on purpose.
 func TestBreakerIsoladoPorCliente(t *testing.T) {
 	a := &contaETrava{}
 	r := novoCenario(t, a, &provedor.Falso{}, 10)
@@ -211,28 +211,28 @@ func TestBreakerIsoladoPorCliente(t *testing.T) {
 	antes := a.n.Load()
 	chamarComPrazo(r, 1)
 	if a.n.Load() != antes {
-		t.Fatal("cliente 1: com o breaker dele aberto, o destino travado devia ser pulado")
+		t.Fatal("client 1: with its breaker open, the hung destination should be skipped")
 	}
 	chamarComPrazo(r, 2)
 	if a.n.Load() != antes+1 {
-		t.Fatal("cliente 2 não devia herdar o breaker aberto pelo cliente 1")
+		t.Fatal("client 2 should not inherit the breaker opened by client 1")
 	}
 	if e := r.Estado(); e[0].Destino != "a/modelo-a" || e[0].Breaker != "open" || e[0].Abertos != 1 {
-		t.Fatalf("estado = %+v", e)
+		t.Fatalf("state = %+v", e)
 	}
 }
 
-// 401/402/403 do provedor é problema da conta do gateway (chave inválida, sem saldo), não do
-// pedido do cliente: tenta o próximo destino.
+// A provider 401/402/403 is a problem with the gateway's account (invalid key, no balance), not with
+// the client's request: try the next destination.
 func TestContaDoProvedorComProblemaFazFallback(t *testing.T) {
 	semSaldo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusPaymentRequired)
-		_, _ = w.Write([]byte(`{"error":{"message":"saldo insuficiente"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"insufficient balance"}}`))
 	})
 	b := &provedor.Falso{}
 	r := novoCenario(t, semSaldo, b, 10)
 	d, err := chamar(t, r)
 	if err != nil || d.Provedor != "b" {
-		t.Fatalf("destino = %v, erro = %v: queria o fallback b", d, err)
+		t.Fatalf("destination = %v, error = %v: want fallback b", d, err)
 	}
 }

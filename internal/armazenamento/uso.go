@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Evento é uma chamada atendida. Nunca guarda o conteúdo das mensagens, só medidas.
+// Evento (event) is a served call. It never stores message content, only measurements.
 type Evento struct {
 	TS                                                              time.Time
 	ClienteID                                                       int64
@@ -21,8 +21,8 @@ type Evento struct {
 	PII                                                             int
 }
 
-// Gravador tira a escrita no banco do caminho da requisição: o handler só põe o evento num
-// canal, e uma goroutine grava em lote (500 eventos ou 1 s, o que vier primeiro).
+// Gravador (writer) takes database writes off the request path: the handler only puts the event on a
+// channel, and a goroutine writes in batches (500 events or 1 s, whichever comes first).
 type Gravador struct {
 	b           *Banco
 	ch          chan Evento
@@ -33,8 +33,8 @@ func NovoGravador(b *Banco, capacidade int) *Gravador {
 	return &Gravador{b: b, ch: make(chan Evento, capacidade)}
 }
 
-// Registrar nunca bloqueia. Canal cheio = o banco não está dando conta; perder um registro
-// de uso é aceitável, travar a API não é. O descarte é contado e aparece em /metrics.
+// Registrar (record) never blocks. A full channel = the database can't keep up; losing a usage record
+// is acceptable, blocking the API is not. Drops are counted and show up in /metrics.
 func (g *Gravador) Registrar(e Evento) bool {
 	select {
 	case g.ch <- e:
@@ -47,8 +47,8 @@ func (g *Gravador) Registrar(e Evento) bool {
 
 func (g *Gravador) Descartados() int64 { return g.descartados.Load() }
 
-// Rodar grava até o contexto acabar e então drena o que sobrou no canal: no shutdown
-// gracioso nenhum evento já aceito se perde.
+// Rodar (run) writes until the context ends and then drains what's left in the channel: on a
+// graceful shutdown no event already accepted is lost.
 func (g *Gravador) Rodar(ctx context.Context) {
 	const tamLote = 500
 	lote := make([]Evento, 0, tamLote)
@@ -58,13 +58,13 @@ func (g *Gravador) Rodar(ctx context.Context) {
 		if len(lote) == 0 {
 			return
 		}
-		// Contexto próprio: o lote final é gravado mesmo com o ctx de Rodar já cancelado.
+		// Its own context: the final batch is written even with Rodar's ctx already cancelled.
 		c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := g.b.gravar(c, lote); err != nil {
-			// Lote perdido conta como descartado: aparece no /metrics junto com o canal cheio.
+			// A lost batch counts as dropped: it shows up in /metrics along with the full channel.
 			g.descartados.Add(int64(len(lote)))
-			slog.Error("gravando uso", "eventos", len(lote), "erro", err.Error())
+			slog.Error("writing usage", "events", len(lote), "error", err.Error())
 		}
 		lote = lote[:0]
 	}
@@ -93,7 +93,7 @@ func (g *Gravador) Rodar(ctx context.Context) {
 func (b *Banco) gravar(ctx context.Context, lote []Evento) error {
 	tx, err := b.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("gravando uso: %w", err)
+		return fmt.Errorf("writing usage: %w", err)
 	}
 	defer tx.Rollback()
 	st, err := tx.PrepareContext(ctx, `INSERT INTO uso (ts, cliente_id, request_id, modelo, destino, status,
@@ -101,14 +101,14 @@ func (b *Banco) gravar(ctx context.Context, lote []Evento) error {
 		latencia_ms, ttft_ms, cache, stream, shadow, pii, tamanho_resposta)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return fmt.Errorf("gravando uso: %w", err)
+		return fmt.Errorf("writing usage: %w", err)
 	}
 	defer st.Close()
 	for _, e := range lote {
 		if _, err := st.ExecContext(ctx, e.TS.UnixMilli(), e.ClienteID, e.RequestID, e.Modelo, e.Destino, e.Status,
 			e.PromptTokens, e.CompletionTokens, e.CacheHitTokens, e.ReasoningTokens, e.CustoMicro, e.EconomiaMicro,
 			e.LatenciaMs, e.TTFTMs, e.Cache, e.Stream, e.Shadow, e.PII, e.TamanhoResposta); err != nil {
-			return fmt.Errorf("gravando uso: %w", err)
+			return fmt.Errorf("writing usage: %w", err)
 		}
 	}
 	return tx.Commit()
@@ -131,7 +131,7 @@ type Grupo struct {
 }
 
 type Ponto struct {
-	Minuto      int64 `json:"minuto"` // unix em segundos
+	Minuto      int64 `json:"minuto"` // unix seconds
 	Requisicoes int64 `json:"requisicoes"`
 	Erros       int64 `json:"erros"`
 }
@@ -158,9 +158,9 @@ const somas = `count(*), coalesce(sum(uso.status >= 400), 0), coalesce(sum(uso.c
 	coalesce(sum(uso.prompt_tokens + uso.completion_tokens), 0), coalesce(sum(uso.custo_micro), 0),
 	coalesce(sum(uso.economia_micro), 0), coalesce(sum(uso.pii), 0)`
 
-// Relatorio agrega o uso de [de, ate). cliente 0 = todos. Chamadas shadow ficam fora dos
-// totais (não foram respondidas a ninguém) e aparecem só na comparação.
-// ponytail: varre a tabela bruta; a tabela uso_minuto entra quando isso aparecer no profile.
+// Relatorio (report) aggregates usage over [de, ate). cliente 0 = all. Shadow calls stay out of the
+// totals (they weren't answered to anyone) and only appear in the comparison.
+// ponytail: scans the raw table; the uso_minuto table comes in when this shows up in a profile.
 func (b *Banco) Relatorio(ctx context.Context, de, ate time.Time, cliente int64) (Relatorio, error) {
 	filtro := `ts >= ? AND ts < ? AND (? = 0 OR cliente_id = ?)`
 	args := []any{de.UnixMilli(), ate.UnixMilli(), cliente, cliente}
@@ -170,15 +170,15 @@ func (b *Banco) Relatorio(ctx context.Context, de, ate time.Time, cliente int64)
 	err := b.db.QueryRowContext(ctx, `SELECT `+somas+` FROM uso WHERE shadow = 0 AND `+filtro, args...).
 		Scan(&t.Requisicoes, &t.Erros, &t.CacheHits, &t.Tokens, &t.CustoMicro, &t.EconomiaMicro, &t.PII)
 	if err != nil {
-		return r, fmt.Errorf("relatório: %w", err)
+		return r, fmt.Errorf("report: %w", err)
 	}
-	// p95 por posto mais próximo: o valor na posição ceil(0,95·n).
+	// Nearest-rank p95: the value at position ceil(0.95·n).
 	if t.Requisicoes > 0 {
 		pos := (95*t.Requisicoes+99)/100 - 1
 		err = b.db.QueryRowContext(ctx, `SELECT latencia_ms FROM uso WHERE shadow = 0 AND `+filtro+
 			` ORDER BY latencia_ms LIMIT 1 OFFSET ?`, append(args, pos)...).Scan(&t.P95Ms)
 		if err != nil {
-			return r, fmt.Errorf("relatório p95: %w", err)
+			return r, fmt.Errorf("report p95: %w", err)
 		}
 	}
 
@@ -186,7 +186,7 @@ func (b *Banco) Relatorio(ctx context.Context, de, ate time.Time, cliente int64)
 		rows, err := b.db.QueryContext(ctx, `SELECT `+coluna+`, `+somas+` FROM uso LEFT JOIN clientes c ON c.id = uso.cliente_id
 			WHERE shadow = 0 AND `+filtro+` GROUP BY 1 ORDER BY 2 DESC, 1`, args...)
 		if err != nil {
-			return nil, fmt.Errorf("relatório por grupo: %w", err)
+			return nil, fmt.Errorf("report by group: %w", err)
 		}
 		defer rows.Close()
 		out := []Grupo{}
@@ -209,7 +209,7 @@ func (b *Banco) Relatorio(ctx context.Context, de, ate time.Time, cliente int64)
 	rows, err := b.db.QueryContext(ctx, `SELECT ts / 60000 * 60, count(*), coalesce(sum(status >= 400), 0)
 		FROM uso WHERE shadow = 0 AND `+filtro+` GROUP BY 1 ORDER BY 1`, args...)
 	if err != nil {
-		return r, fmt.Errorf("relatório série: %w", err)
+		return r, fmt.Errorf("report series: %w", err)
 	}
 	defer rows.Close()
 	r.Serie = []Ponto{}
@@ -224,13 +224,13 @@ func (b *Banco) Relatorio(ctx context.Context, de, ate time.Time, cliente int64)
 		return r, err
 	}
 
-	// Comparação só para os aliases que tiveram shadow no período: principal × sombra.
+	// Comparison only for the aliases that had shadows in the period: primary × shadow.
 	rows2, err := b.db.QueryContext(ctx, `SELECT modelo, destino, shadow, count(*), avg(latencia_ms), avg(custo_micro), avg(tamanho_resposta)
 		FROM uso WHERE status < 400 AND cache = 0 AND `+filtro+`
 		AND modelo IN (SELECT DISTINCT modelo FROM uso WHERE shadow = 1 AND `+filtro+`)
 		GROUP BY 1, 2, 3 ORDER BY 1, 3`, append(args, args...)...)
 	if err != nil {
-		return r, fmt.Errorf("relatório shadow: %w", err)
+		return r, fmt.Errorf("report shadow: %w", err)
 	}
 	defer rows2.Close()
 	r.Shadow = []Comparacao{}
@@ -246,13 +246,13 @@ func (b *Banco) Relatorio(ctx context.Context, de, ate time.Time, cliente int64)
 	return r, rows2.Err()
 }
 
-// GastoDoMes soma o custo por cliente desde o início do mês (UTC) de t, para o orçamento.
+// GastoDoMes (month's spend) sums the cost per client since the start of t's (UTC) month, for the budget.
 func (b *Banco) GastoDoMes(ctx context.Context, t time.Time) (map[int64]int64, error) {
 	t = t.UTC()
 	inicio := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 	rows, err := b.db.QueryContext(ctx, `SELECT cliente_id, sum(custo_micro) FROM uso WHERE shadow = 0 AND ts >= ? GROUP BY 1`, inicio.UnixMilli())
 	if err != nil {
-		return nil, fmt.Errorf("gasto do mês: %w", err)
+		return nil, fmt.Errorf("month spend: %w", err)
 	}
 	defer rows.Close()
 	out := map[int64]int64{}

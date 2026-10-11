@@ -1,4 +1,4 @@
-// Comando comporta: lê o ambiente, liga as dependências e sobe a API com shutdown gracioso.
+// Command comporta reads the environment, wires the dependencies and serves the API with graceful shutdown.
 package main
 
 import (
@@ -26,9 +26,9 @@ import (
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(log) // pacotes sem logger próprio (gravador de uso) também saem em JSON
+	slog.SetDefault(log) // packages without their own logger (usage writer) also log JSON
 	if err := rodar(log); err != nil {
-		log.Error("encerrando", "erro", err.Error())
+		log.Error("exiting", "error", err.Error())
 		os.Exit(1)
 	}
 }
@@ -54,12 +54,12 @@ func rodar(log *slog.Logger) error {
 			base = cmp.Or(os.Getenv("DEEPSEEK_BASE_URL"), base)
 		}
 		if chave == "" {
-			// Sem chave real, o provedor vira o falso em loopback: dá para rodar, testar e medir sem gastar.
+			// Without a real key, the provider becomes the fake on loopback: run, test and measure without spending.
 			base, err = subirFalso()
 			if err != nil {
 				return err
 			}
-			log.Warn("sem chave para o provedor: usando o provedor falso", "provedor", nome, "env", p.ChaveEnv)
+			log.Warn("no key for the provider: using the fake provider", "provider", nome, "env", p.ChaveEnv)
 		}
 		clientes[nome] = provedor.Novo(base, chave, max(p.MaxConexoes, 10), cfg.Timeouts.Conexao())
 	}
@@ -70,27 +70,27 @@ func rodar(log *slog.Logger) error {
 	}
 	defer banco.Fechar()
 	gravador := armazenamento.NovoGravador(banco, 10_000)
-	// Demo pública (Render): o disco zera a cada reinício, então o cliente demo é recriado na subida.
+	// Public demo (Render): the disk is wiped on every restart, so the demo client is recreated at startup.
 	if chave := os.Getenv("DEMO_CHAVE"); chave != "" {
 		criou, err := banco.SemearDemo(context.Background(), chave)
 		if err != nil {
-			return fmt.Errorf("seed da demo: %w", err)
+			return fmt.Errorf("seeding the demo: %w", err)
 		}
 		if criou {
-			log.Info("cliente demo criado")
+			log.Info("demo client created")
 		}
 	}
 
 	adminToken := os.Getenv("ADMIN_TOKEN")
 	if adminToken == "" {
-		// Conveniência local: sem token configurado, gera um e mostra uma vez no terminal.
+		// Local convenience: without a configured token, generate one and print it once to the terminal.
 		adminToken = rand.Text()
-		fmt.Fprintf(os.Stderr, "ADMIN_TOKEN não definido; token desta execução: %s\n", adminToken)
+		fmt.Fprintf(os.Stderr, "ADMIN_TOKEN not set; token for this run: %s\n", adminToken)
 	}
 	srv, err := httpapi.Novo(httpapi.Deps{
 		Config: cfg, Roteador: gateway.NovoRoteador(cfg, clientes), Banco: banco, Gravador: gravador,
 		Cache: cache.Novo(cfg.Cache.MaxMB<<20, time.Duration(cfg.Cache.TTLs)*time.Second), AdminToken: adminToken, Painel: web.Painel(), Log: log,
-		// K_SERVICE é definido pelo Cloud Run; TRUST_PROXY=1 para outro proxy confiável na frente.
+		// K_SERVICE is set by Cloud Run; TRUST_PROXY=1 for another trusted proxy in front.
 		ConfiarProxy: os.Getenv("K_SERVICE") != "" || os.Getenv("TRUST_PROXY") == "1",
 	})
 	if err != nil {
@@ -99,31 +99,31 @@ func rodar(log *slog.Logger) error {
 	ctxUso, pararUso := context.WithCancel(context.Background())
 	usoFim := make(chan struct{})
 	go func() { gravador.Rodar(ctxUso); close(usoFim) }()
-	// Roda por último (defers são LIFO): drena o uso antes de fechar o banco.
+	// Runs last (defers are LIFO): drains usage before closing the database.
 	defer func() { pararUso(); <-usoFim }()
 
-	// Sem WriteTimeout: ele cortaria streams longos. Os prazos ficam no watchdog do relay.
+	// No WriteTimeout: it would cut long streams. Deadlines live in the relay's watchdog.
 	h := &http.Server{Addr: ":" + cmp.Or(os.Getenv("PORT"), "8080"), Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	ctx, parar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer parar()
 	erroServidor := make(chan error, 1)
 	go func() { erroServidor <- h.ListenAndServe() }()
-	log.Info("comporta no ar", "endereco", h.Addr)
+	log.Info("comporta listening", "address", h.Addr)
 
 	select {
 	case err := <-erroServidor:
 		return err
 	case <-ctx.Done():
 	}
-	// Shutdown gracioso: para de aceitar, espera as requisições e os shadows, depois drena o uso.
-	// 8 s porque o Cloud Run manda SIGKILL 10 s depois do SIGTERM; sobra tempo para gravar o uso.
-	log.Info("desligando")
+	// Graceful shutdown: stop accepting, wait for requests and shadows, then drain usage.
+	// 8 s because Cloud Run sends SIGKILL 10 s after SIGTERM; that leaves time to write usage.
+	log.Info("shutting down")
 	ctxFim, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	if err := h.Shutdown(ctxFim); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		// Prazo estourado com streams abertos: Close cancela o contexto deles, que cobram o uso
-		// (estimado) e registram antes de sair. Sem isso o processo terminaria no meio deles.
-		log.Warn("shutdown", "erro", err.Error())
+		// Deadline exceeded with open streams: Close cancels their context, and they charge the
+		// (estimated) usage and record it before exiting. Otherwise the process would end mid-stream.
+		log.Warn("shutdown", "error", err.Error())
 		h.Close()
 	}
 	srv.Encerrar(ctxFim)
@@ -133,7 +133,7 @@ func rodar(log *slog.Logger) error {
 func subirFalso() (string, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return "", fmt.Errorf("subindo provedor falso: %w", err)
+		return "", fmt.Errorf("starting the fake provider: %w", err)
 	}
 	f := &provedor.Falso{
 		Latencia: time.Duration(envNum("FALSO_LATENCIA_MS", 60)) * time.Millisecond,

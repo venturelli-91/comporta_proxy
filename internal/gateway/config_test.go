@@ -11,14 +11,14 @@ func TestCarregar(t *testing.T) {
 	casos := []struct {
 		nome, json, querErro string
 	}{
-		{"config válida", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}},"precos":{"m":{"saida":1}}}`, ""},
-		// Modelo sem preço custaria 0 e nunca consumiria o orçamento do cliente: falha na carga.
-		{"destino sem preço", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}}}`, "sem preço"},
-		{"shadow sem preço", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}],"shadow":{"provedor":"p","modelo":"s"}}},"precos":{"m":{"saida":1}}}`, "sem preço"},
-		{"provedor desconhecido", `{"provedores":{},"modelos":{"a":{"destinos":[{"provedor":"x","modelo":"m"}]}},"precos":{"m":{"saida":1}}}`, "provedor desconhecido"},
-		// Timeout negativo faria o watchdog disparar na hora: toda requisição viraria 504.
-		{"timeout negativo", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}},"precos":{"m":{"saida":1}},"timeouts":{"primeiro_token_s":-1}}`, "timeout negativo"},
-		{"alias sem destino", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[]}}}`, "sem destinos"},
+		{"valid config", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}},"precos":{"m":{"saida":1}}}`, ""},
+		// A model without a price would cost 0 and never consume the client's budget: loading fails.
+		{"destination without price", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}}}`, "no price"},
+		{"shadow without price", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}],"shadow":{"provedor":"p","modelo":"s"}}},"precos":{"m":{"saida":1}}}`, "no price"},
+		{"unknown provider", `{"provedores":{},"modelos":{"a":{"destinos":[{"provedor":"x","modelo":"m"}]}},"precos":{"m":{"saida":1}}}`, "unknown provider"},
+		// A negative timeout would fire the watchdog immediately: every request would become a 504.
+		{"negative timeout", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}},"precos":{"m":{"saida":1}},"timeouts":{"primeiro_token_s":-1}}`, "negative timeout"},
+		{"alias without destination", `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[]}}}`, "no destinations"},
 	}
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
@@ -28,24 +28,24 @@ func TestCarregar(t *testing.T) {
 			}
 			_, err := Carregar(caminho)
 			if c.querErro == "" && err != nil {
-				t.Fatalf("erro inesperado: %v", err)
+				t.Fatalf("unexpected error: %v", err)
 			}
 			if c.querErro != "" && (err == nil || !strings.Contains(err.Error(), c.querErro)) {
-				t.Fatalf("erro = %v, queria conter %q", err, c.querErro)
+				t.Fatalf("error = %v, want it to contain %q", err, c.querErro)
 			}
 		})
 	}
 }
 
-// O comporta.json do repositório precisa continuar válido.
+// The repository's comporta.json must stay valid.
 func TestConfigDoRepositorio(t *testing.T) {
 	if _, err := Carregar("../../comporta.json"); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Zero significa "use o padrão": a config chega a quem usa já preenchida, num lugar só.
-// Sem isso, conexao_s ausente virava net.Dialer{Timeout: 0}, ou seja, sem prazo de conexão.
+// Zero means "use the default": the config reaches its users already filled in, in one place.
+// Without this, a missing conexao_s became net.Dialer{Timeout: 0}, that is, no connection deadline.
 func TestCarregarPreenchePadroes(t *testing.T) {
 	caminho := filepath.Join(t.TempDir(), "c.json")
 	json := `{"provedores":{"p":{}},"modelos":{"a":{"destinos":[{"provedor":"p","modelo":"m"}]}},"precos":{"m":{"saida":1}},"timeouts":{"total_s":42}}`
@@ -56,11 +56,11 @@ func TestCarregarPreenchePadroes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	quer := TimeoutsCfg{ConexaoS: 5, PrimeiroTokenS: 30, EntreChunksS: 60, TotalS: 42} // o que veio no JSON é mantido
+	quer := TimeoutsCfg{ConexaoS: 5, PrimeiroTokenS: 30, EntreChunksS: 60, TotalS: 42} // what came in the JSON is kept
 	if c.Timeouts != quer {
-		t.Errorf("timeouts = %+v, queria %+v", c.Timeouts, quer)
+		t.Errorf("timeouts = %+v, want %+v", c.Timeouts, quer)
 	}
 	if c.Cache != (CacheCfg{MaxMB: 64, TTLs: 300}) {
-		t.Errorf("cache = %+v, queria {MaxMB:64 TTLs:300}", c.Cache)
+		t.Errorf("cache = %+v, want {MaxMB:64 TTLs:300}", c.Cache)
 	}
 }

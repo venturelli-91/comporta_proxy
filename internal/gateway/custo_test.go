@@ -21,17 +21,17 @@ func TestCusto(t *testing.T) {
 		quando time.Time
 		quer   int64
 	}{
-		{"pico sem cache de prefixo", "m", Uso{PromptTokens: 1000, CompletionTokens: 500}, quintaPico, 2000},
-		{"fora do pico paga metade", "m", Uso{PromptTokens: 1000, CompletionTokens: 500}, quintaForaPico, 1000},
-		{"fim de semana não é pico", "m", Uso{PromptTokens: 1000, CompletionTokens: 500}, sabadoPico, 1000},
-		{"cache de prefixo barateia a entrada", "m", Uso{PromptTokens: 1000, CacheHitTokens: 800, CacheMissTokens: 200, CompletionTokens: 0}, quintaPico, 280},
-		{"requisição pequena arredonda, não zera", "m", Uso{PromptTokens: 1, CompletionTokens: 1}, quintaPico, 3},
-		{"modelo sem preço custa zero", "x", Uso{PromptTokens: 1000}, quintaPico, 0},
+		{"peak without prefix cache", "m", Uso{PromptTokens: 1000, CompletionTokens: 500}, quintaPico, 2000},
+		{"off-peak pays half", "m", Uso{PromptTokens: 1000, CompletionTokens: 500}, quintaForaPico, 1000},
+		{"weekend is not peak", "m", Uso{PromptTokens: 1000, CompletionTokens: 500}, sabadoPico, 1000},
+		{"prefix cache makes input cheaper", "m", Uso{PromptTokens: 1000, CacheHitTokens: 800, CacheMissTokens: 200, CompletionTokens: 0}, quintaPico, 280},
+		{"small request rounds, not zeroes", "m", Uso{PromptTokens: 1, CompletionTokens: 1}, quintaPico, 3},
+		{"model without price costs zero", "x", Uso{PromptTokens: 1000}, quintaPico, 0},
 	}
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
 			if got := cfg.Custo(c.modelo, c.uso, c.quando); got != c.quer {
-				t.Errorf("Custo = %d, quer %d", got, c.quer)
+				t.Errorf("Custo = %d, want %d", got, c.quer)
 			}
 		})
 	}
@@ -43,11 +43,11 @@ func TestCarregarValida(t *testing.T) {
 		Modelos:    map[string]ModeloCfg{"a": {Destinos: []Destino{{"p", "m"}}, Shadow: &Destino{"nao-existe", "m"}}},
 	}
 	if err := cfg.validar(); err == nil {
-		t.Fatal("esperava erro para shadow com provedor desconhecido")
+		t.Fatal("expected an error for a shadow with an unknown provider")
 	}
 	cfg.Modelos["a"] = ModeloCfg{}
 	if err := cfg.validar(); err == nil {
-		t.Fatal("esperava erro para modelo sem destinos")
+		t.Fatal("expected an error for a model without destinations")
 	}
 }
 

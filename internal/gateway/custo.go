@@ -2,8 +2,8 @@ package gateway
 
 import "time"
 
-// Uso é o bloco "usage" da API compatível com OpenAI, com os campos extras da DeepSeek
-// (cache de prefixo). Os tokens de raciocínio já estão dentro de CompletionTokens.
+// Uso is the OpenAI-compatible API's "usage" block, with DeepSeek's extra fields
+// (prefix cache). Reasoning tokens are already included in CompletionTokens.
 type Uso struct {
 	PromptTokens     int64 `json:"prompt_tokens"`
 	CompletionTokens int64 `json:"completion_tokens"`
@@ -14,8 +14,8 @@ type Uso struct {
 	} `json:"completion_tokens_details"`
 }
 
-// Custo devolve o custo em micro-dólares. Carregar já recusa modelo de destino sem preço
-// (custaria 0 e furaria o orçamento); o 0 aqui só aparece em configs montadas à mão nos testes.
+// Custo returns the cost in micro-dollars. Carregar already refuses destination models without a price
+// (they would cost 0 and bypass the budget); the 0 here only shows up in hand-built test configs.
 func (c *Config) Custo(modelo string, u Uso, t time.Time) int64 {
 	p, ok := c.preco(modelo)
 	if !ok {
@@ -25,7 +25,7 @@ func (c *Config) Custo(modelo string, u Uso, t time.Time) int64 {
 	if hit+miss == 0 {
 		miss = u.PromptTokens
 	}
-	// Soma antes de dividir para não perder frações em requisições pequenas.
+	// Sum before dividing so small requests don't lose their fractions.
 	total := hit*p.hit + miss*p.miss + u.CompletionTokens*p.saida
 	micro := (total + 500_000) / 1_000_000
 	if !c.Pico.emPico(t) {
@@ -34,7 +34,7 @@ func (c *Config) Custo(modelo string, u Uso, t time.Time) int64 {
 	return micro
 }
 
-// emPico: sem janelas configuradas, tudo é preço cheio.
+// emPico (at peak): without configured windows, everything is full price.
 func (p PicoCfg) emPico(t time.Time) bool {
 	if len(p.JanelasUTC) == 0 {
 		return true

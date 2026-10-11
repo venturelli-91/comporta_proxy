@@ -33,36 +33,36 @@ func (s *Servidor) rotasAdmin(mux *http.ServeMux) {
 }
 
 func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
-	// Allow() confere e consome num passo só: tentativas paralelas não passam juntas pela checagem.
-	// O login certo também gasta um token; como o limite é por IP, o atacante não tranca o admin.
+	// Allow() checks and consumes in a single step: parallel attempts can't all slip past the check.
+	// A correct login also spends a token; since the limit is per IP, an attacker can't lock the admin out.
 	if !s.limiteLogin(s.ipDe(r)).Allow() {
 		retryAfter(w, time.Minute)
-		erro(w, http.StatusTooManyRequests, "muitas_tentativas", "muitas tentativas de login, aguarde um minuto")
+		erro(w, http.StatusTooManyRequests, "muitas_tentativas", "too many login attempts, wait a minute")
 		return
 	}
 	var v struct{ Token string }
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&v)
 	if !iguais(v.Token, s.d.AdminToken) {
-		erro(w, http.StatusUnauthorized, "nao_autorizado", "token de admin inválido")
+		erro(w, http.StatusUnauthorized, "nao_autorizado", "invalid admin token")
 		return
 	}
-	// Atrás do TLS do Cloud Run a requisição chega em HTTP puro, com X-Forwarded-Proto.
+	// Behind Cloud Run's TLS the request arrives as plain HTTP, with X-Forwarded-Proto.
 	seguro := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 	http.SetCookie(w, &http.Cookie{Name: cookieAdmin, Value: s.novaSessao(), Path: "/", MaxAge: int(duracaoSessao.Seconds()),
 		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: seguro})
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// limiteLogin: 5 tentativas por IP, uma nova a cada 12 s. Por IP para que um
-// atacante não tranque o admin de verdade do lado de fora.
-// ponytail: a poda varre o mapa e só tira os cheios; com 10 mil IPs gastos ao mesmo tempo o
-// mapa cresce e cada login fica O(n). LRU com teto se isso virar alvo.
+// limiteLogin: 5 attempts per IP, a new one every 12 s. Per IP so that an attacker
+// can't lock the real admin out from outside.
+// ponytail: pruning scans the map and only removes full limiters; with 10k IPs spent at once the
+// map grows and each login becomes O(n). A bounded LRU if this becomes a target.
 func (s *Servidor) limiteLogin(ip string) *rate.Limiter {
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	if len(s.tentativas) > 10_000 {
 		for k, l := range s.tentativas {
-			if l.Tokens() >= float64(l.Burst()) { // cheio = igual a um novo, não guarda nada
+			if l.Tokens() >= float64(l.Burst()) { // full = same as a new one, holds nothing
 				delete(s.tentativas, k)
 			}
 		}
@@ -75,11 +75,11 @@ func (s *Servidor) limiteLogin(ip string) *rate.Limiter {
 	return l
 }
 
-// ipDe usa a última entrada do X-Forwarded-For, a que o proxy confiável (o front-end do Cloud
-// Run) acrescenta; o cliente só forja as anteriores. Sem esse proxy o cabeçalho inteiro é do
-// cliente, que ganharia um balde novo a cada tentativa: aí vale o endereço da conexão.
-// ponytail: assume um proxy só (Cloud Run direto, Render). Com um HTTPS Load Balancer na frente, a
-// última entrada seria o IP do LB e todos cairiam no mesmo balde: contar N proxies confiáveis do fim.
+// ipDe uses the last X-Forwarded-For entry, the one the trusted proxy (Cloud Run's front end)
+// appends; the client can only forge the earlier ones. Without that proxy the whole header belongs
+// to the client, who would get a fresh bucket on every attempt: then the connection address is used.
+// ponytail: assumes a single proxy (Cloud Run directly, Render). With an HTTPS Load Balancer in front,
+// the last entry would be the LB's IP and everyone would share one bucket: count N trusted proxies from the end.
 func (s *Servidor) ipDe(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); s.d.ConfiarProxy && xff != "" {
 		return strings.TrimSpace(xff[strings.LastIndex(xff, ",")+1:])
@@ -102,7 +102,7 @@ func (s *Servidor) logout(w http.ResponseWriter, r *http.Request) {
 func idDe(w http.ResponseWriter, r *http.Request, nome string) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue(nome), 10, 64)
 	if err != nil {
-		erro(w, http.StatusBadRequest, "id_invalido", nome+" inválido")
+		erro(w, http.StatusBadRequest, "id_invalido", "invalid "+nome)
 	}
 	return id, err == nil
 }
@@ -110,23 +110,23 @@ func idDe(w http.ResponseWriter, r *http.Request, nome string) (int64, bool) {
 func (s *Servidor) lerCliente(w http.ResponseWriter, r *http.Request) (armazenamento.Cliente, bool) {
 	var c armazenamento.Cliente
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&c); err != nil || c.Nome == "" {
-		erro(w, http.StatusBadRequest, "cliente_invalido", "informe ao menos o nome do cliente")
+		erro(w, http.StatusBadRequest, "cliente_invalido", "the client needs at least a name")
 		return c, false
 	}
 	for _, m := range c.Modelos {
 		if _, ok := s.d.Config.Modelos[m]; !ok {
-			erro(w, http.StatusBadRequest, "modelo_desconhecido", "modelo "+m+" não existe")
+			erro(w, http.StatusBadRequest, "modelo_desconhecido", "model "+m+" does not exist")
 			return c, false
 		}
 	}
 	return c, true
 }
 
-// mutou relê o snapshot depois de qualquer alteração e responde. Um erro do banco vira 500
-// sem detalhe; "não encontrado" vira 404.
+// mutou reloads the snapshot after any change and responds. A database error becomes a 500
+// without details; "not found" becomes a 404.
 func (s *Servidor) mutou(w http.ResponseWriter, r *http.Request, err error, status int, v any) {
 	if errors.Is(err, armazenamento.ErrNaoEncontrado) {
-		erro(w, http.StatusNotFound, "nao_encontrado", "registro não encontrado")
+		erro(w, http.StatusNotFound, "nao_encontrado", "record not found")
 		return
 	}
 	if err == nil {
@@ -143,10 +143,10 @@ func (s *Servidor) mutou(w http.ResponseWriter, r *http.Request, err error, stat
 	responderJSON(w, status, v)
 }
 
-// interno responde 500 sem detalhe; o erro de verdade fica só no log.
+// interno responds 500 without details; the real error goes only to the log.
 func (s *Servidor) interno(w http.ResponseWriter, err error) {
-	s.d.Log.Error("admin", "erro", err.Error())
-	erro(w, http.StatusInternalServerError, "interno", "erro interno")
+	s.d.Log.Error("admin", "error", err.Error())
+	erro(w, http.StatusInternalServerError, "interno", "internal error")
 }
 
 func (s *Servidor) listarClientes(w http.ResponseWriter, r *http.Request) {
@@ -195,14 +195,14 @@ func (s *Servidor) listarChaves(w http.ResponseWriter, r *http.Request) {
 	responderJSON(w, http.StatusOK, lista)
 }
 
-// criarChave é o único momento em que a chave inteira aparece.
+// criarChave (create key) is the only moment the full key appears.
 func (s *Servidor) criarChave(w http.ResponseWriter, r *http.Request) {
 	id, ok := idDe(w, r, "id")
 	if !ok {
 		return
 	}
 	if _, existe := s.snap.Load().clientes[id]; !existe {
-		erro(w, http.StatusNotFound, "nao_encontrado", "cliente não encontrado")
+		erro(w, http.StatusNotFound, "nao_encontrado", "client not found")
 		return
 	}
 	texto, k, err := s.d.Banco.CriarChave(r.Context(), id)
@@ -219,7 +219,7 @@ func (s *Servidor) revogarChave(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// uso: /admin/uso?de=RFC3339&ate=RFC3339&cliente=ID (padrão: últimas 24 h, todos).
+// uso (usage): /admin/uso?de=RFC3339&ate=RFC3339&cliente=ID (default: last 24 h, all clients).
 func (s *Servidor) uso(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	ate, err := time.Parse(time.RFC3339, q.Get("ate"))

@@ -6,8 +6,8 @@ services:
       - path: .env
         required: false
     environment:
-      # Sem padrão: um token conhecido numa porta publicada abriria o painel para qualquer um.
-      ADMIN_TOKEN: ${ADMIN_TOKEN:?defina ADMIN_TOKEN no .env (copie o .env.example)}
+      # No default: a known token on a published port would open the dashboard to anyone.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env (copy .env.example)}
     volumes:
       - dados:/dados
 volumes:

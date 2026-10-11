@@ -1,5 +1,5 @@
-// Package provedor fala com qualquer API compatível com OpenAI (a DeepSeek é uma delas).
-// Por isso existe um único Cliente: "deepseek" e "openaicompat" diferem só na base_url.
+// Package provedor (provider) talks to any OpenAI-compatible API (DeepSeek is one of them).
+// That's why there's a single Cliente: "deepseek" and "openaicompat" differ only in base_url.
 package provedor
 
 import (
@@ -20,8 +20,8 @@ type Cliente struct {
 	http    *http.Client
 }
 
-// Novo cria um cliente com transporte próprio. O padrão do Go guarda só 2 conexões ociosas
-// por host: sob carga isso força handshakes TLS novos o tempo todo.
+// Novo creates a client with its own transport. Go's default keeps only 2 idle connections
+// per host: under load that forces new TLS handshakes all the time.
 func Novo(baseURL, chave string, maxConexoes int, timeoutConexao time.Duration) *Cliente {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.MaxIdleConns = maxConexoes
@@ -30,11 +30,11 @@ func Novo(baseURL, chave string, maxConexoes int, timeoutConexao time.Duration) 
 	t.IdleConnTimeout = 90 * time.Second
 	t.ForceAttemptHTTP2 = true
 	t.DialContext = (&net.Dialer{Timeout: timeoutConexao, KeepAlive: 30 * time.Second}).DialContext
-	// Sem http.Client.Timeout: ele cortaria streams longos. Os prazos vêm do context.
+	// No http.Client.Timeout: it would cut long streams. Deadlines come from the context.
 	return &Cliente{baseURL: baseURL, chave: chave, http: &http.Client{Transport: t}}
 }
 
-// ErroHTTP é uma falha do provedor. Status 0 significa erro de rede (sem resposta).
+// ErroHTTP is a provider failure. Status 0 means a network error (no response).
 type ErroHTTP struct {
 	Status     int
 	RetryAfter time.Duration
@@ -44,24 +44,24 @@ type ErroHTTP struct {
 
 func (e *ErroHTTP) Error() string {
 	if e.Status == 0 {
-		return "provedor inacessível: " + e.Mensagem
+		return "provider unreachable: " + e.Mensagem
 	}
-	return fmt.Sprintf("provedor respondeu %d: %s", e.Status, e.Mensagem)
+	return fmt.Sprintf("provider responded %d: %s", e.Status, e.Mensagem)
 }
 
 func (e *ErroHTTP) Unwrap() error { return e.causa }
 
-// Repetivel: só vale tentar de novo quando o problema é do provedor (sobrecarga, 5xx, rede).
-// 400/401/402/422 vão falhar igual na próxima tentativa.
+// Repetivel (retryable): retrying only makes sense when the problem is the provider's (overload, 5xx, network).
+// 400/401/402/422 will fail the same way on the next attempt.
 func (e *ErroHTTP) Repetivel() bool { return e.Status == 0 || e.Status == 429 || e.Status >= 500 }
 
 func (e *ErroHTTP) Espera() time.Duration { return e.RetryAfter }
 
-// Enviar faz o POST e devolve a resposta só quando ela é 2xx; quem chama fecha o Body.
+// Enviar (send) makes the POST and returns the response only when it's 2xx; the caller closes the Body.
 func (c *Cliente) Enviar(ctx context.Context, corpo []byte) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(corpo))
 	if err != nil {
-		return nil, fmt.Errorf("montando requisição: %w", err)
+		return nil, fmt.Errorf("building request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.chave != "" {
@@ -70,7 +70,7 @@ func (c *Cliente) Enviar(ctx context.Context, corpo []byte) (*http.Response, err
 	resp, err := c.http.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			// A causa diz quem cortou: o cliente (Canceled) ou um prazo do gateway.
+			// The cause says who cut it: the client (Canceled) or a gateway deadline.
 			return nil, context.Cause(ctx)
 		}
 		return nil, &ErroHTTP{Mensagem: err.Error(), causa: err}

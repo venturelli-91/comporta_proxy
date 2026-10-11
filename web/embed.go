@@ -1,4 +1,4 @@
-// Package web embute o build do painel React no binário: um único artefato de deploy.
+// Package web embeds the React dashboard build in the binary: a single deploy artifact.
 package web
 
 import (
@@ -9,7 +9,7 @@ import (
 //go:embed all:dist
 var dist embed.FS
 
-// Painel devolve os arquivos de web/dist (vazio até rodar `npm run build`).
+// Painel returns the files in web/dist (empty until `npm run build` runs).
 func Painel() fs.FS {
 	sub, _ := fs.Sub(dist, "dist")
 	return sub
