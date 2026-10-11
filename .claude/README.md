@@ -1,18 +1,18 @@
-# .claude — processo, agentes e documentação da Comporta
+# .claude — Comporta's process, agents and documentation
 
-| Caminho | Para quê |
+| Path | What for |
 |---|---|
-| `softhouse.md` | Regras da softhouse: princípios, fluxo, roteamento, matriz de autonomia, ponytail |
-| `agents/` | Subagentes (Agent tool): `tech-lead`, `dev-backend`, `dev-frontend`, `code-reviewer`, `qa-automation`, `seguranca`, `performance`, `devops-sre` |
-| `commands/` | `/ticket` (cadeia dev → review → QA), `/feature` (Definition of Done), `/daily-report` |
-| `skills/` | `go-gateway` (convenções Go do repo), `entrevista` (treino para 14/10) |
-| `docs/log.md` | Diário de execução: feature, commit, números, decisões |
-| `docs/backlog.md` | Roadmap como checklist + dívida deliberada (`ponytail:`) |
-| `docs/checklist.md` | Definition of Done por feature, pré-PR e pré-entrevista |
-| `docs/features/` | Uma página por feature: o quê, porquê, decisões, Go vs TS, exercício, pergunta de entrevista |
-| `docs/arquitetura/` | `backend.md` (pacotes e caminho da requisição), `frontend.md` (painel) |
-| `docs/design/painel.md` | Telas, tokens e estados do painel |
-| `docs/comunicacao/` | Textos prontos para `stakeholders.md` (não técnicos), `tech-leads.md` e `devs.md` |
+| `softhouse.md` | The "software house" rules: principles, flow, routing, autonomy matrix, ponytail |
+| `agents/` | Subagents (Agent tool): `tech-lead`, `dev-backend`, `dev-frontend`, `code-reviewer`, `qa-automation`, `security`, `performance`, `devops-sre` |
+| `commands/` | `/ticket` (dev → review → QA chain), `/feature` (Definition of Done), `/daily-report` |
+| `skills/` | `go-gateway` (the repo's Go conventions), `interview` (practice for 10/14) |
+| `docs/log.md` | Execution log: feature, commit, numbers, decisions |
+| `docs/backlog.md` | Roadmap as a checklist + deliberate debt (`ponytail:`) |
+| `docs/checklist.md` | Definition of Done per feature, pre-PR and pre-interview |
+| `docs/features/` | One page per feature: what, why, decisions, Go vs TS, exercise, interview question |
+| `docs/architecture/` | `backend.md` (packages and request path), `frontend.md` (dashboard) |
+| `docs/design/dashboard.md` | Dashboard screens, tokens and states |
+| `docs/communication/` | Ready-made texts for `stakeholders.md` (non-technical), `tech-leads.md` and `devs.md` |
 
-Fontes da verdade fora daqui: `CLAUDE.md` (produto e regras), `docs/ARQUITETURA.md` (decisões técnicas),
-`docs/superpowers/specs/` (spec) e `docs/superpowers/plans/` (plano de execução).
+Sources of truth outside this folder: `CLAUDE.md` (product and rules), `docs/ARCHITECTURE.md` (technical decisions),
+`docs/superpowers/specs/` (spec) and `docs/superpowers/plans/` (execution plans).

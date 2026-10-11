@@ -1,75 +1,95 @@
 # Backlog
 
-Prioridades da softhouse: P0 (prazo da entrevista), P1 (semana), P2 (melhoria).
+Software-house priorities: P0 (interview deadline), P1 (this week), P2 (improvement).
 
-## Segurança do login (P0) — resolvido em 10/10, branch `fix/login-seguranca`
-- [x] Corrida (TOCTOU): `Allow()` na entrada; teste com 20 tentativas paralelas
-- [x] `X-Forwarded-For` só com proxy confiável (`K_SERVICE` ou `TRUST_PROXY=1`)
-- [x] Poda do mapa de tentativas tira só limitadores cheios
-- [x] M-5 revogar chave exige o cliente dono
-- [x] Cortes de stdlib da auditoria ponytail (`cmp.Or`, `slices.SortFunc`, sem struct `limitador`)
+## Translation to English, phase 2 (P1, after 10/14)
+Phase 1 (10/11) translated docs, `.claude/`, code comments, UI text and API error messages. Still in Portuguese:
+- [ ] Go identifiers (types, functions, variables, test names) and package names (`provedor`, `armazenamento`, `resiliencia`)
+- [ ] `comporta.json` keys (`provedores`, `modelos`, `precos`...) and model aliases (`rapido`, `forte`, `migracao`)
+- [ ] API contract: error envelope `{"erro":{"codigo","mensagem"}}`, error codes (`chave_invalida`...), admin routes and JSON fields (`/admin/clientes`, `orcamento_micro`...), `X-Comporta-Cache: ligado`, `X-Comporta-Enviado`
+- [ ] SQLite tables and columns (needs a migration or a recreated database)
+- [ ] Environment variable `DEMO_CHAVE`, folders `carga/` and `web/src/telas/`, the public demo token/key
+- [ ] Update the README, the dashboard and `carga/carga.js` together with the contract (a breaking change: version or announce it)
 
-Demo pública: `render.yaml` + seed `DEMO_CHAVE` (10/10). Cloud Run fica para quando houver billing.
+## Login security (P0) — solved on 10/10, branch `fix/login-seguranca`
+- [x] Race (TOCTOU): `Allow()` on entry; test with 20 parallel attempts
+- [x] `X-Forwarded-For` only with a trusted proxy (`K_SERVICE` or `TRUST_PROXY=1`)
+- [x] Pruning of the attempts map removes only full limiters
+- [x] M-5 revoking a key requires the owning client
+- [x] Stdlib cuts from the ponytail audit (`cmp.Or`, `slices.SortFunc`, no `limitador` struct)
 
-## MVP — até 13/10 (P0)
-- [x] 01 Config em JSON e custo com horário de pico
-- [x] 02 Provedor: cliente compatível com OpenAI + provedor falso
-- [x] 03 Retry com backoff, jitter e Retry-After
-- [x] 04 Roteador: semáforo, circuit breaker, fallback
-- [x] 05 Cache LRU com TTL
-- [x] 06 LGPD: mascaramento + restauração (inclusive em stream)
-- [x] 07 Armazenamento: clientes, chaves por hash, uso em lote
-- [x] 08 API HTTP: chat (com e sem stream), auth, rate limit, orçamento, cache + singleflight, shadow, admin, métricas
-- [x] 09 Binário + Docker + compose
-- [x] 10 Painel React
-- [x] 11 k6 contra o falso, números no README
-- [x] 12 Auditoria ponytail, README, PR
+Public demo: `render.yaml` + `DEMO_CHAVE` seed (10/10). Cloud Run waits until there is billing.
 
-## Depois da entrevista (P1/P2)
-- [ ] Rate limit por tokens estimados com reconciliação pelo `usage`
-- [ ] Relatório comparativo de shadow mais rico (diferença de conteúdo, não só tamanho)
-- [ ] Métricas com o client oficial do Prometheus + OpenTelemetry
-- [ ] Postgres + Redis (cache e rate limit compartilhados entre instâncias)
-- [ ] Deploy no Cloud Run com Secret Manager
-- [ ] Fanout de stream ao vivo para os seguidores do singleflight
-- [ ] Fila de jobs adiáveis para rodar fora do pico
-- [ ] Cache semântico, com limiar alto e medição de acertos falsos
+## MVP — by 10/13 (P0)
+- [x] 01 JSON config and cost with peak hours
+- [x] 02 Provider: OpenAI-compatible client + fake provider
+- [x] 03 Retry with backoff, jitter and Retry-After
+- [x] 04 Router: semaphore, circuit breaker, fallback
+- [x] 05 LRU cache with TTL
+- [x] 06 LGPD: masking + restoring (including in streams)
+- [x] 07 Storage: clients, hashed keys, batched usage
+- [x] 08 HTTP API: chat (with and without streaming), auth, rate limit, budget, cache + singleflight, shadow, admin, metrics
+- [x] 09 Binary + Docker + compose
+- [x] 10 React dashboard
+- [x] 11 k6 against the fake, numbers in the README
+- [x] 12 Ponytail audit, README, PR
 
-## Dívida deliberada (`// ponytail:`)
-Colhida dos comentários `ponytail:` em 09/10. Cada linha tem o gatilho para pagar.
+## After the interview (P1/P2)
+- [ ] Rate limit by estimated tokens reconciled with `usage`
+- [ ] Hard budget cap: pre-reserve the maximum cost and settle with the real `usage` (today it's a soft cap)
+- [ ] Mask `tools`, `tool_calls[].function.arguments` and multimodal content; restore `tool_calls` in streams
+- [ ] Richer shadow comparison report (content difference, not just size)
+- [ ] Metrics with the official Prometheus client + OpenTelemetry
+- [ ] Postgres + Redis (cache and rate limit shared across instances)
+- [ ] Cloud Run deploy with Secret Manager
+- [ ] Live stream fan-out for singleflight followers
+- [ ] Queue of deferrable jobs to run off-peak
+- [ ] Semantic cache, with a high threshold and measurement of false hits
 
-| Onde | Atalho | Pagar quando |
+## Deliberate debt (`// ponytail:`)
+Harvested from the `ponytail:` comments on 10/09 (updated 10/11). Each line has the trigger for paying it.
+
+| Where | Shortcut | Pay when |
 |---|---|---|
-| `internal/httpapi/servidor.go` | Orçamento (gasto do mês) em memória | Mais de uma instância → Redis |
-| `internal/httpapi/admin.go` | `ipDe` confia na última entrada do XFF (um proxy só) | HTTPS Load Balancer na frente → contar N proxies confiáveis |
-| `internal/httpapi/admin.go` | Poda do mapa de tentativas é O(n) e só tira os cheios | Ataque com >10 mil IPs reais gastos ao mesmo tempo → LRU com teto |
-| `internal/httpapi/auth.go` | Limite de 32 requisições simultâneas igual para todos | Algum cliente precisar de mais → coluna no cliente |
-| `internal/httpapi/auth.go` | Sessões do admin em memória | Mais de uma instância → Redis |
-| `internal/httpapi/chat.go` | Uso estimado (stream cortado) sem marca no evento | Painel precisar distinguir → coluna nova |
-| `internal/httpapi/chat.go` | Seguidores do singleflight recebem replay, não stream ao vivo | TTFT de requisições cacheáveis importar → fanout |
-| `internal/httpapi/relay.go` | Um restaurador LGPD para todas as choices | Cliente usar `n > 1` |
-| `internal/httpapi/relay.go` | Content multimodal (partes) não é mascarado | Cliente mandar imagem ou partes |
-| `internal/httpapi/metricas.go` | Contadores próprios, sem labels | Prometheus/Grafana de verdade → client oficial |
-| `internal/gateway/roteador.go` | `Estado()` sem ocupação do semáforo | Junto com as métricas Prometheus |
-| `internal/cache/cache.go` | Mutex global | Disputa aparecer no profile → shards |
-| `internal/armazenamento/uso.go` | Relatório varre a tabela bruta | Consulta lenta no profile → `uso_minuto` |
-| `.claude/docs/arquitetura/frontend.md` | Sem react-router | Rotas aninhadas ou links profundos |
+| `internal/httpapi/servidor.go` | Budget (month's spend) in memory | More than one instance → Redis |
+| `internal/httpapi/admin.go` | `ipDe` trusts the last XFF entry (a single proxy) | HTTPS Load Balancer in front → count N trusted proxies |
+| `internal/httpapi/admin.go` | Pruning the attempts map is O(n) and only removes full ones | An attack with >10k real IPs spent at once → bounded LRU |
+| `internal/httpapi/auth.go` | The same 32 concurrent requests limit for everyone | Some client needs more → a client column |
+| `internal/httpapi/auth.go` | Admin sessions in memory | More than one instance → Redis |
+| `internal/httpapi/auth.go` | A removed client's limiter stays in the map | Number of clients explodes → delete in removerCliente |
+| `internal/httpapi/chat.go` | Estimated usage (cut stream) without a flag on the event | The dashboard needs to tell them apart → new column |
+| `internal/httpapi/chat.go` | Singleflight followers get a replay, not a live stream | TTFT of cacheable requests matters → fan-out |
+| `internal/httpapi/relay.go` | One LGPD restorer for all choices | A client uses `n > 1` |
+| `internal/httpapi/relay.go` | Multimodal content (parts) isn't masked | A client sends images or parts |
+| `internal/httpapi/metricas.go` | Hand-rolled counters, no labels | Real Prometheus/Grafana → official client |
+| `internal/gateway/roteador.go` | `Estado()` without semaphore occupancy | Together with the Prometheus metrics |
+| `internal/gateway/roteador.go` | A removed client's breakers stay in the map | It grows → an `Esquecer(cliente)` called by the admin |
+| `internal/cache/cache.go` | Global mutex | Contention shows up in a profile → shards |
+| `internal/armazenamento/uso.go` | The report scans the raw table | A slow query in a profile → `uso_minuto` |
+| `.claude/docs/architecture/frontend.md` | No react-router | Nested routes or deep links |
 
-## Achados menores da revisão final (09/10) — adiados
-- [x] M-1 `Recarregar` concorrente pode gravar snapshot antigo (revogação desfeita até a próxima mutação): mutex em volta de `Recarregar` (resolvido 10/10)
-- [x] M-2 Lote de uso que falha ao gravar some sem log: logar e somar em `descartados` (resolvido 10/10)
-- [x] M-3 Shutdown espera shadows sem limite: contexto do servidor cancelado no SIGTERM + prazo de ~8 s (resolvido 10/10)
-- [x] M-4 Stream restaura só `delta.content`; `reasoning_content` da DeepSeek fica mascarado (resolvido 10/10)
-- [x] M-5 (resolvido 10/10) Revogar chave ignora o cliente do path: `AND cliente_id = ?`
-- [x] M-6 Resposta sem stream acima de 16 MiB é truncada e volta 200: ler `max+1` e devolver 502 (resolvido 10/10)
-- [ ] M-7 Painel shadow compara tamanho SSE × JSON: medir tamanho do conteúdo
-- [x] M-8 (resolvido 09/10: sessão aleatória revogável, limite de login, Secure atrás de proxy, compose sem token padrão) Cookie admin não revogável no servidor, `Secure` atrás do TLS do Cloud Run, sem limite de tentativas, token padrão no compose
-- [x] M-9 Teste de desconexão não confere o status 499 explicitamente (resolvido 10/10)
-- [x] M-10 Sessão expirada não volta para o login no painel (invalidar `sessao` num 401) (resolvido 10/10)
+## Minor findings from the final review (10/09) — deferred
+- [x] M-1 A concurrent `Recarregar` could store an old snapshot (revocation undone until the next mutation): mutex around `Recarregar` (solved 10/10)
+- [x] M-2 A usage batch that fails to write disappears without a log: log it and add to `descartados` (solved 10/10)
+- [x] M-3 Shutdown waits for shadows without a limit: server context cancelled on SIGTERM + ~8 s deadline (solved 10/10)
+- [x] M-4 The stream restores only `delta.content`; DeepSeek's `reasoning_content` stays masked (solved 10/10)
+- [x] M-5 (solved 10/10) Revoking a key ignored the client in the path: `AND cliente_id = ?`
+- [x] M-6 A non-streaming response above 16 MiB is truncated and returns 200: read `max+1` and return 502 (solved 10/10)
+- [ ] M-7 The shadow screen compares SSE size × JSON size: measure the content size
+- [x] M-8 (solved 10/09: random revocable session, login limit, Secure behind a proxy, compose without a default token) Admin cookie not revocable on the server, `Secure` behind Cloud Run's TLS, no attempt limit, default token in compose
+- [x] M-9 The disconnect test doesn't check the 499 status explicitly (solved 10/10)
+- [x] M-10 An expired session doesn't go back to login in the dashboard (invalidate `sessao` on a 401) (solved 10/10)
 
-## Achados menores da revisão de 10/10 — adiados
-- [x] Resposta acima de 16 MiB vira 502 com custo 0, mas o provedor cobrou: estimar como no stream cortado (resolvido 10/10)
-- [x] reasoning_content retido no restaurador (termina em `[`) sai depois do content: finalizar o raciocínio no primeiro chunk de content (resolvido 10/10)
-- [x] Teste do limite de login paralelo deveria exigir exatamente 5, não só no máximo 5 (resolvido 10/10)
-- [x] `ipDe` assume Cloud Run sem HTTPS Load Balancer na frente (com LB, a última entrada do XFF é o LB) (documentado como `ponytail:` no código)
-- [x] recarregar_test ignora erros de CriarCliente/CriarChave; falso negativo sem o mutex depende de 200 ms (erros checados 10/10; a espera de 200 ms fica)
+## Minor findings from the 10/10 review — deferred
+- [x] A response above 16 MiB becomes 502 with cost 0, but the provider charged: estimate as for a cut stream (solved 10/10)
+- [x] reasoning_content held in the restorer (ending in `[`) comes out after the content: finalize the reasoning on the first content chunk (solved 10/10)
+- [x] The parallel login limit test should require exactly 5, not at most 5 (solved 10/10)
+- [x] `ipDe` assumes Cloud Run without an HTTPS Load Balancer in front (with an LB, the last XFF entry is the LB) (documented as `ponytail:` in the code)
+- [x] recarregar_test ignores CriarCliente/CriarChave errors; the false negative without the mutex depends on 200 ms (errors checked 10/10; the 200 ms wait stays)
+
+## Findings from the full review (10/11)
+- [x] Unknown `/v1/*` and `/admin/*` routes returned the dashboard's `index.html` with 200 → JSON 404
+- [x] `conexao_s` missing meant no dial timeout → defaults filled in `Carregar`
+- [x] Empty `AdminToken` checked on every login → refused once in `Novo`
+- [x] The dashboard showed the login screen for any session error → only on 401
+- [ ] Merge `resiliencia` into `gateway` (−6 lines): kept on purpose for now, "interface in the consumer" is documented and an interview talking point

@@ -1,69 +1,69 @@
-# 08 — API HTTP (chat, admin, métricas)
+# 08 — HTTP API (chat, admin, metrics)
 
-**Pacote:** `internal/httpapi` · **Painel embutido:** `web/embed.go`
+**Package:** `internal/httpapi` · **Embedded dashboard:** `web/embed.go`
 
-## O que faz
-| Rota | Função |
+## What it does
+| Route | Purpose |
 |---|---|
-| `POST /v1/chat/completions` | Compatível com OpenAI, com e sem `stream` |
-| `GET /v1/models` | Aliases liberados para a chave |
-| `GET /healthz`, `/readyz`, `/metrics` | Sondas e contadores no formato Prometheus |
-| `/admin/*` | Login (cookie), clientes, chaves, uso, provedores, modelos |
-| `/` | Painel React embutido (fallback para `index.html`) |
+| `POST /v1/chat/completions` | OpenAI-compatible, with and without `stream` |
+| `GET /v1/models` | Aliases allowed for the key |
+| `GET /healthz`, `/readyz`, `/metrics` | Probes and counters in Prometheus format |
+| `/admin/*` | Login (cookie), clients, keys, usage, providers, models |
+| `/` | Embedded React dashboard (falls back to `index.html`); unknown `/v1/*` and `/admin/*` routes return a JSON 404 |
 
-Caminho do chat: request ID → `Bearer ck_` → hash → snapshot → rate limit (429 + `Retry-After`) → orçamento (402) →
-corpo ≤ 1 MiB (413) → alias (400/403) → LGPD → `include_usage` no stream → cache opt-in + singleflight
-**ou** shadow + chamada direta → relay → custo → evento de uso.
+Chat path: request ID → `Bearer ck_` → hash → snapshot → concurrency per client (429) → rate limit (429 + `Retry-After`) →
+budget (402) → body ≤ 1 MiB (413) → alias (400/403) → LGPD → `include_usage` in streams → opt-in cache + singleflight
+**or** shadow + direct call → relay → cost → usage event.
 
-## Por que assim (decisões)
-- **Snapshot em `atomic.Pointer`:** autenticar não trava nada, e o admin troca o snapshot inteiro a cada mudança. Uma chave revogada cai na hora (teste `TestRevogacaoValeNaHora`).
-- **Corpo como `map[string]json.RawMessage`:** campos que o gateway não conhece (`tools`, `response_format`...) seguem intactos para o provedor.
-- **Cabeçalhos do stream só no primeiro dado útil:** até lá ainda dá para devolver 504 de verdade. Keep-alive não reinicia o watchdog.
-- **Cliente desconectou = 499:** o contexto da requisição vai até o provedor e a chamada paga é cancelada.
-- **Singleflight com `context.WithoutCancel`:** se o "líder" desconectar, os outros que esperavam a mesma resposta não perdem a chamada.
-- **Quem paga no singleflight:** o líder registra o custo; os seguidores registram economia, como um cache hit.
-- **Shadow só sem cache**, em goroutine com contexto próprio, rastreada por `WaitGroup` para o shutdown esperar.
-- **Cookie do admin guarda o SHA-256 do token**, não o token. `HttpOnly; SameSite=Strict`, comparado com `subtle.ConstantTimeCompare`.
-- **Chave `ck_` buscada pelo hash num mapa:** o tempo da busca não vaza a chave, porque quem ataca não controla o hash.
-- Ponytail: seguidores do singleflight recebem replay em vez de stream ao vivo; métricas sem o client do Prometheus; content multimodal não é mascarado; um restaurador de stream para todas as choices. Tudo marcado no código.
+## Why this way (decisions)
+- **Snapshot in an `atomic.Pointer`:** authenticating locks nothing, and the admin swaps the whole snapshot on every change. A revoked key stops working immediately (`TestRevogacaoValeNaHora`).
+- **Body as `map[string]json.RawMessage`:** fields the gateway doesn't know (`tools`, `response_format`...) go to the provider untouched.
+- **Stream headers only on the first useful data:** until then a real 504 can still be returned. Keep-alives don't reset the watchdog.
+- **Client disconnected = 499:** the request's context goes all the way to the provider and the paid call is cancelled.
+- **Singleflight with `context.WithoutCancel`:** if the "leader" disconnects, the others waiting for the same response don't lose the call.
+- **Who pays in the singleflight:** the leader records the cost; the followers record savings, like a cache hit.
+- **Shadow only without cache**, in a goroutine with its own context, tracked by a `WaitGroup` so shutdown waits for it.
+- **The admin cookie is a random session:** the server keeps only its SHA-256 with the expiry, and logout revokes it. `HttpOnly; SameSite=Strict`; the token is compared with `subtle.ConstantTimeCompare`, and an empty token is refused at startup.
+- **The `ck_` key is looked up by its hash in a map:** the lookup time doesn't leak the key, because the attacker doesn't control the hash.
+- Ponytail: singleflight followers get a replay instead of a live stream; metrics without the Prometheus client; multimodal content isn't masked; one stream restorer for all choices. All marked in the code.
 
-## Números (09/10, notebook do Aurélio, provedor falso no loopback)
+## Numbers (10/09, Aurélio's laptop, fake provider on loopback)
 `go test -run x -bench Overhead -benchmem ./internal/httpapi/`
-| Caso | ns/op | B/op | allocs/op |
+| Case | ns/op | B/op | allocs/op |
 |---|---|---|---|
-| direto | ~187 000 | 27 238 | 260 |
-| com LGPD | ~215 000 | 38 231 | 305 |
+| direct | ~187,000 | 27,238 | 260 |
+| with LGPD | ~215,000 | 38,231 | 305 |
 
-Isso inclui o salto HTTP real até o falso. O mascaramento custa por volta de 28 µs por requisição.
+That includes the real HTTP hop to the fake. Masking costs about 28 µs per request.
 
-## Como testar
-`go test ./internal/httpapi/ -v`: 401, 429 + Retry-After, 402, 403, 400, 413, sem stream, stream, cache hit, cache opt-in,
-singleflight (10 → 1), LGPD ida e volta (com e sem stream), fallback, revogação, shadow, desconexão (499), watchdog (504),
-`/v1/models`, `/metrics` e admin sem token. Testes de mutação confirmaram que os testes de LGPD e de singleflight
-detectam a regressão.
+## How to test
+`go test ./internal/httpapi/ -v`: 401, 429 + Retry-After, 402, 403, 400, 413, non-streaming, streaming, cache hit, opt-in cache,
+singleflight (10 → 1), LGPD round trip (with and without streaming), fallback, revocation, shadow, disconnect (499), watchdog (504),
+`/v1/models`, `/metrics`, admin without a token and JSON 404 for unknown API routes. Mutation testing confirmed that the LGPD and
+singleflight tests detect the regression.
 
 ## Go vs TypeScript
-- `http.ServeMux` com padrões `"POST /v1/chat/completions"` e `{id}` (Go 1.22+) substitui o roteador do Express.
-- Middleware é só uma função que recebe e devolve `http.HandlerFunc`, sem `next()`.
-- `context.WithValue` é como o `res.locals` do Express, mas imutável e encadeado.
-- `http.NewResponseController(w).Flush()` corresponde ao `res.flush()` do SSE no Node.
+- `http.ServeMux` with patterns like `"POST /v1/chat/completions"` and `{id}` (Go 1.22+) replaces Express's router. The most specific pattern wins, so `/v1/` beats `/`.
+- Middleware is just a function that takes and returns an `http.HandlerFunc`, with no `next()`.
+- `context.WithValue` is like Express's `res.locals`, but immutable and chained.
+- `http.NewResponseController(w).Flush()` corresponds to `res.flush()` for SSE in Node.
 
-## Exercício
-Escreva o teste de que um cliente com orçamento estourado **não** consegue passar pelo cache (o 402 vem antes). Depois mova a checagem de orçamento para depois do cache e veja o teste quebrar.
+## Exercise
+Write the test that a client with an exhausted budget **can't** get through the cache (the 402 comes first). Then move the budget check after the cache and watch the test break.
 
-## Pergunta de entrevista
-"Dez requisições iguais chegam ao mesmo tempo e o cliente da primeira desconecta. O que acontece com as outras nove?"
+## Interview question
+"Ten identical requests arrive at the same time and the client of the first one disconnects. What happens to the other nine?"
 
-## Correções da revisão final (09/10)
-O review independente do branch achou 7 pontos importantes. Todos foram corrigidos com um teste que falhou antes:
-| Achado | Correção | Teste |
+## Fixes from the final review (10/09)
+The independent review of the branch found 7 important issues. All were fixed with a test that failed first:
+| Finding | Fix | Test |
 |---|---|---|
-| Stream travava sem prazo até o provedor mandar cabeçalhos | `vigia`: o watchdog começa antes do `Chamar` e cancela com `errTimeout` | `TestWatchdogAntesDosCabecalhos` |
-| Caminho de cache/singleflight sem watchdog | o líder lê através da mesma `vigia` | `TestWatchdogNoCaminhoDoCache` |
-| Breaker ignorava timeouts | só `context.Canceled` (cliente) é excluído; `Enviar` devolve `context.Cause` | `TestBreakerContaTimeout` |
-| Marcador literal numa mensagem colidia com o dado real de outra | `lgpd.MascararVarios` reserva o texto de todas as mensagens | `TestMascararVariosNaoColideEntreMensagens` + `FuzzMascararVarios` |
-| Chunk de usage com `choices: []` quebrava `chunk.choices[0]` dos SDKs | só repassa se o cliente pediu `include_usage`; o falso agora imita a DeepSeek | `TestUsageSoQuandoOClientePede` |
-| Stream cortado registrava custo 0 (furava o orçamento) | estimativa: bytes das mensagens / 4 + 1 token por chunk | `TestStreamCortadoAindaCobra` |
-| Shadow sem limite disputava a concorrência da conta | semáforo de 16 shadows; sem vaga, descarta e conta (`comporta_shadow_descartados_total`) | `TestShadowLimitado` |
+| A stream hung without a deadline until the provider sent headers | `vigia` (watchdog): it starts before `Chamar` and cancels with `errTimeout` | `TestWatchdogAntesDosCabecalhos` |
+| Cache/singleflight path without a watchdog | the leader reads through the same `vigia` | `TestWatchdogNoCaminhoDoCache` |
+| The breaker ignored timeouts | only `context.Canceled` (client) is excluded; `Enviar` returns `context.Cause` | `TestBreakerContaTimeout` |
+| A literal placeholder in one message collided with real data in another | `lgpd.MascararVarios` reserves the text of every message | `TestMascararVariosNaoColideEntreMensagens` + `FuzzMascararVarios` |
+| A usage chunk with `choices: []` broke the SDKs' `chunk.choices[0]` | relayed only if the client asked for `include_usage`; the fake now mimics DeepSeek | `TestUsageSoQuandoOClientePede` |
+| A cut stream recorded a cost of 0 (bypassing the budget) | estimate: message bytes / 4 + 1 token per chunk | `TestStreamCortadoAindaCobra` |
+| Unbounded shadows competed for the account's concurrency | a 16-shadow semaphore; without a slot, drop and count (`comporta_shadow_descartados_total`) | `TestShadowLimitado` |
 
-Bônus da correção: o relay ficou mais simples. O `vigia` cancela o contexto e a leitura passou a ser síncrona, sem a goroutine leitora.
+A bonus of the fix: the relay got simpler. The `vigia` cancels the context and reading became synchronous, without the reader goroutine.

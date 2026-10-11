@@ -1,29 +1,29 @@
-# 05 — Cache LRU com TTL
+# 05 — LRU cache with TTL
 
-**Pacote:** `internal/cache` (`cache.go`)
+**Package:** `internal/cache` (`cache.go`)
 
-## O que faz
-Guarda respostas inteiras (JSON, ou o stream SSE completo para replay) por chave, com TTL e limite em
-**bytes**. Quando enche, tira o menos usado recentemente. Cada entrada guarda o custo original, que vira
-"economia" a cada hit.
+## What it does
+Stores whole responses (JSON, or the complete SSE stream for replay) by key, with a TTL and a limit in
+**bytes**. When it fills up, it evicts the least recently used. Each entry stores the original cost, which
+becomes "savings" on every hit.
 
-## Por que assim (decisões)
-- **`container/list` + mapa**, da stdlib: a lista dá a ordem de uso em O(1) e o mapa dá a busca em O(1). Sem dependência.
-- **Limite em bytes:** respostas de LLM variam de 100 B a centenas de KB, então contar itens não diz nada sobre a memória.
-- **`Lock` no `Get`:** um hit mexe na lista, então `RWMutex` não ajudaria.
-- **Expiração preguiçosa:** a entrada vencida é removida quando alguém a pede ou quando o LRU a despeja. Não há goroutine de limpeza.
-- Ponytail: mutex global marcado no código, com o caminho de upgrade (shards por hash) caso apareça disputa no profile.
-- O cache é **opt-in** e a chave é calculada **depois do mascaramento LGPD** (Task 8): o cache nunca vê dado pessoal.
+## Why this way (decisions)
+- **`container/list` + a map**, from the stdlib: the list gives the usage order in O(1) and the map gives lookup in O(1). No dependency.
+- **A byte limit:** LLM responses range from 100 B to hundreds of KB, so counting items says nothing about memory.
+- **`Lock` on `Get`:** a hit moves the item in the list, so an `RWMutex` wouldn't help.
+- **Lazy expiration:** an expired entry is removed when someone asks for it or when the LRU evicts it. There's no cleanup goroutine.
+- Ponytail: the global mutex is marked in the code, with the upgrade path (shards by hash) in case contention shows up in a profile.
+- The cache is **opt-in** and the key is computed **after LGPD masking** (feature 08): the cache never sees personal data.
 
-## Como testar
-`go test ./internal/cache/ -v`: hit, TTL, despejo LRU, entrada maior que o cache, substituição, concorrência (`-race`).
+## How to test
+`go test ./internal/cache/ -v`: hit, TTL, LRU eviction, entry larger than the cache, replacement, concurrency (`-race`).
 
 ## Go vs TypeScript
-- Um `Map` do JS já preserva a ordem de inserção, e o LRU clássico em JS usa `delete` + `set`. No Go o mapa não tem ordem, por isso existe a lista.
-- `el.Value.(*item)` é uma *type assertion*: a lista guarda `any`, como um `unknown` que você converte.
+- A JS `Map` already preserves insertion order, and the classic JS LRU uses `delete` + `set`. In Go the map has no order, which is why the list exists.
+- `el.Value.(*item)` is a *type assertion*: the list stores `any`, like an `unknown` that you convert.
 
-## Exercício
-Troque o mutex global por 16 shards (`fnv` da chave → índice) e meça com `go test -bench` antes e depois.
+## Exercise
+Replace the global mutex with 16 shards (`fnv` of the key → index) and measure with `go test -bench` before and after.
 
-## Pergunta de entrevista
-"Por que o seu LRU limita bytes e não itens, e o que acontece com uma resposta maior que o cache inteiro?"
+## Interview question
+"Why does your LRU limit bytes and not items, and what happens to a response bigger than the whole cache?"
