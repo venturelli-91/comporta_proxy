@@ -3,10 +3,10 @@
 package httpapi
 
 import (
-	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -85,14 +85,17 @@ func Novo(d Deps) (*Servidor, error) {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
+	// Token vazio abriria o admin: ConstantTimeCompare("", "") devolve 1. Recusado aqui, uma vez,
+	// em vez de checado em cada login.
+	if d.AdminToken == "" {
+		return nil, errors.New("httpapi: AdminToken vazio")
+	}
 	t := d.Config.Timeouts
 	s := &Servidor{
 		d: d, limites: map[int64]*rate.Limiter{}, sombras: make(chan struct{}, 16),
 		emCurso: map[int64]int{}, porCliente: 32,
 		sessoes: map[string]time.Time{}, tentativas: map[string]*rate.Limiter{},
-		primeiroToken: cmp.Or(t.PrimeiroToken(), 30*time.Second),
-		entreChunks:   cmp.Or(t.EntreChunks(), 60*time.Second),
-		total:         cmp.Or(t.Total(), 10*time.Minute),
+		primeiroToken: t.PrimeiroToken(), entreChunks: t.EntreChunks(), total: t.Total(),
 	}
 	s.ctxSombras, s.pararSombras = context.WithCancel(context.Background())
 	ctx := context.Background()
@@ -158,6 +161,12 @@ func (s *Servidor) Handler() http.Handler {
 	mux.HandleFunc("GET /readyz", s.pronto)
 	mux.HandleFunc("GET /metrics", s.metricas)
 	s.rotasAdmin(mux)
+	// Mais específicos que "/": rota errada da API responde 404 JSON, não o index.html do painel.
+	naoExiste := func(w http.ResponseWriter, r *http.Request) {
+		erro(w, http.StatusNotFound, "rota_inexistente", "rota inexistente")
+	}
+	mux.HandleFunc("/v1/", naoExiste)
+	mux.HandleFunc("/admin/", naoExiste)
 	if s.d.Painel != nil {
 		mux.Handle("/", painel(s.d.Painel))
 	}

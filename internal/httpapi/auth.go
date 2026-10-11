@@ -40,6 +40,8 @@ func clienteDe(ctx context.Context) armazenamento.Cliente {
 
 // permitir aplica o token bucket do cliente. Devolve quanto esperar quando passou do limite.
 // O limitador é recriado quando o admin muda o RPM.
+// ponytail: cliente removido deixa o limitador no mapa (um por cliente já criado; o AUTOINCREMENT
+// impede um cliente novo de herdá-lo). Apagar em removerCliente se o número de clientes explodir.
 func (s *Servidor) permitir(cli armazenamento.Cliente) (bool, time.Duration) {
 	if cli.RPM <= 0 {
 		return true, 0
@@ -161,7 +163,7 @@ func (s *Servidor) admin(h http.HandlerFunc) http.HandlerFunc {
 		} else if c, err := r.Cookie(cookieAdmin); err == nil {
 			ok = s.sessaoValida(c.Value)
 		}
-		if s.d.AdminToken == "" || !ok {
+		if !ok {
 			erro(w, http.StatusUnauthorized, "nao_autorizado", "login de admin necessário")
 			return
 		}

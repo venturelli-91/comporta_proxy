@@ -2,16 +2,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ErroApi, enviar } from "./api";
 import Clientes from "./telas/Clientes";
+import { Estado } from "./telas/Estado";
 import Playground from "./telas/Playground";
 import Shadow from "./telas/Shadow";
 import Visao from "./telas/Visao";
 import { botao, campo, cartao, IconeClientes, IconePlayground, IconeSair, IconeShadow, IconeVisao, Marca, SeletorTema } from "./ui";
 
 const telas = {
-  visao: { nome: "Visão geral", el: Visao, icone: IconeVisao },
-  clientes: { nome: "Clientes e chaves", el: Clientes, icone: IconeClientes },
-  shadow: { nome: "Migração (shadow)", el: Shadow, icone: IconeShadow },
-  playground: { nome: "Playground", el: Playground, icone: IconePlayground },
+  visao: { nome: "Visão geral", curto: "Visão", el: Visao, icone: IconeVisao },
+  clientes: { nome: "Clientes e chaves", curto: "Clientes", el: Clientes, icone: IconeClientes },
+  shadow: { nome: "Migração (shadow)", curto: "Shadow", el: Shadow, icone: IconeShadow },
+  playground: { nome: "Playground", curto: "Playground", el: Playground, icone: IconePlayground },
 } as const;
 type Tela = keyof typeof telas;
 
@@ -32,53 +33,58 @@ export default function App() {
   useEffect(() => {
     document.title = `${telas[tela].nome} · Comporta`;
   }, [tela]);
-  const qc = useQueryClient();
-
   if (sessao.isPending) return null;
-  if (sessao.isError) return <Login />;
+  // Só 401 é "sem sessão"; servidor fora do ar ou 500 mostram o erro, não um login que não resolveria.
+  if (sessao.error instanceof ErroApi && sessao.error.status === 401) return <Login />;
+  if (sessao.isError)
+    return (
+      <main className="grid min-h-screen place-items-center px-4">
+        <Estado q={sessao} />
+      </main>
+    );
 
   const Atual = telas[tela].el;
   return (
     <div className="min-h-screen md:grid md:grid-cols-[15rem_1fr]">
+      {/* Celular: barra de topo com marca, tema e sair; as seções vão para a barra de abas embaixo. */}
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-borda bg-lateral/95 px-4 py-2.5 backdrop-blur md:hidden">
+        <Marca />
+        <div className="flex items-center gap-1">
+          <SeletorTema />
+          <BotaoSair rotulo={false} />
+        </div>
+      </header>
       <nav
-        className="flex flex-col gap-4 border-b border-borda bg-lateral px-4 py-4 md:sticky md:top-0 md:h-screen md:border-r md:border-b-0 md:py-6"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-borda bg-lateral/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:sticky md:top-0 md:flex md:h-screen md:flex-col md:gap-4 md:border-t-0 md:border-r md:bg-lateral md:px-4 md:py-6 md:backdrop-blur-none"
         aria-label="Seções"
       >
-        <div className="flex items-center justify-between px-2">
+        <div className="hidden px-2 md:block">
           <Marca />
         </div>
-        <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+        <ul className="grid grid-cols-4 md:flex md:flex-col md:gap-1">
           {(Object.keys(telas) as Tela[]).map((t) => {
             const I = telas[t].icone;
             return (
-              <li key={t} className="shrink-0">
+              <li key={t}>
                 <a
                   href={`#${t}`}
                   aria-current={t === tela ? "page" : undefined}
-                  className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-suave hover:bg-realce hover:text-texto aria-[current=page]:bg-superficie aria-[current=page]:font-medium aria-[current=page]:text-texto aria-[current=page]:shadow-cartao aria-[current=page]:[&>svg]:text-acento"
+                  className="flex flex-col items-center gap-1 px-1 py-2 text-[11px] text-suave hover:text-texto aria-[current=page]:font-medium aria-[current=page]:text-acento md:flex-row md:gap-2.5 md:rounded-md md:px-2.5 md:py-2 md:text-sm md:hover:bg-realce md:aria-[current=page]:bg-superficie md:aria-[current=page]:text-texto md:aria-[current=page]:shadow-cartao md:aria-[current=page]:[&>svg]:text-acento"
                 >
                   <I />
-                  {telas[t].nome}
+                  <span className="md:hidden">{telas[t].curto}</span>
+                  <span className="hidden md:inline">{telas[t].nome}</span>
                 </a>
               </li>
             );
           })}
         </ul>
-        <div className="flex items-center justify-between gap-2 px-2 md:mt-auto">
+        <div className="mt-auto hidden items-center justify-between gap-2 px-2 md:flex">
           <SeletorTema />
-          <button
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-suave hover:bg-realce hover:text-texto"
-            onClick={async () => {
-              await enviar("POST", "/admin/logout");
-              qc.resetQueries({ queryKey: ["sessao"] });
-            }}
-          >
-            <IconeSair />
-            Sair
-          </button>
+          <BotaoSair rotulo />
         </div>
       </nav>
-      <main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-10 md:py-10">
+      <main className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-6 pb-28 md:px-10 md:py-10">
         <h1 className="mb-8 text-2xl font-semibold tracking-tight">{telas[tela].nome}</h1>
         <Atual />
       </main>
@@ -143,5 +149,23 @@ function Login() {
         </form>
       </div>
     </main>
+  );
+}
+
+function BotaoSair({ rotulo }: { rotulo: boolean }) {
+  const qc = useQueryClient();
+  return (
+    <button
+      aria-label="Sair"
+      title="Sair"
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-suave hover:bg-realce hover:text-texto"
+      onClick={async () => {
+        await enviar("POST", "/admin/logout");
+        qc.resetQueries({ queryKey: ["sessao"] });
+      }}
+    >
+      <IconeSair />
+      {rotulo && "Sair"}
+    </button>
   );
 }

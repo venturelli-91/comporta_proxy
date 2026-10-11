@@ -42,7 +42,7 @@ export default function Visao() {
         <Numero rotulo="Economia do cache" valor={usd(t.economia_micro)} />
         <Numero rotulo="Latência p95" valor={`${num(t.p95_ms)} ms`} />
         <Numero rotulo="Taxa de erro" valor={`${taxaErro.toFixed(1)}%`} tom={taxaErro >= 5 ? "erro" : t.erros > 0 ? "alerta" : undefined} />
-        <Numero rotulo="Dados pessoais protegidos" valor={num(t.pii)} tom={t.pii > 0 ? "acento" : undefined} />
+        <Numero rotulo="Dados pessoais protegidos" valor={num(t.pii)} tom={t.pii > 0 ? "acento" : undefined} largo />
       </dl>
 
       <section aria-labelledby="g-minuto">
@@ -86,7 +86,7 @@ export default function Visao() {
       </section>
 
       <div className="grid gap-10 lg:grid-cols-[2fr_1fr]">
-        <section aria-labelledby="t-clientes">
+        <section aria-labelledby="t-clientes" className="min-w-0">
           <h2 id="t-clientes" className="mb-3 font-medium">
             Por cliente
           </h2>
@@ -115,7 +115,7 @@ export default function Visao() {
             </table>
           </div>
         </section>
-        <section aria-labelledby="t-prov">
+        <section aria-labelledby="t-prov" className="min-w-0">
           <h2 id="t-prov" className="mb-3 font-medium">
             Provedores
           </h2>
@@ -171,9 +171,9 @@ function Vazao({ r }: { r: Relatorio }) {
 }
 
 const corValor = { acento: "text-acento", alerta: "text-alerta", erro: "text-erro" } as const;
-function Numero({ rotulo, valor, tom }: { rotulo: string; valor: string; tom?: keyof typeof corValor }) {
+function Numero({ rotulo, valor, tom, largo }: { rotulo: string; valor: string; tom?: keyof typeof corValor; largo?: boolean }) {
   return (
-    <div className={`${cartao} px-4 py-3`}>
+    <div className={`${cartao} px-4 py-3 ${largo ? "col-span-2 sm:col-span-1" : ""}`}>
       <dt className="text-sm text-suave">{rotulo}</dt>
       <dd className={`mt-1 text-xl font-semibold tracking-tight ${tom ? corValor[tom] : ""}`}>{valor}</dd>
     </div>

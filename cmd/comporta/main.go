@@ -87,16 +87,9 @@ func rodar(log *slog.Logger) error {
 		adminToken = rand.Text()
 		fmt.Fprintf(os.Stderr, "ADMIN_TOKEN não definido; token desta execução: %s\n", adminToken)
 	}
-	mb, ttl := cfg.Cache.MaxMB, time.Duration(cfg.Cache.TTLs)*time.Second
-	if mb <= 0 {
-		mb = 64
-	}
-	if ttl <= 0 {
-		ttl = 5 * time.Minute
-	}
 	srv, err := httpapi.Novo(httpapi.Deps{
 		Config: cfg, Roteador: gateway.NovoRoteador(cfg, clientes), Banco: banco, Gravador: gravador,
-		Cache: cache.Novo(mb<<20, ttl), AdminToken: adminToken, Painel: web.Painel(), Log: log,
+		Cache: cache.Novo(cfg.Cache.MaxMB<<20, time.Duration(cfg.Cache.TTLs)*time.Second), AdminToken: adminToken, Painel: web.Painel(), Log: log,
 		// K_SERVICE é definido pelo Cloud Run; TRUST_PROXY=1 para outro proxy confiável na frente.
 		ConfiarProxy: os.Getenv("K_SERVICE") != "" || os.Getenv("TRUST_PROXY") == "1",
 	})

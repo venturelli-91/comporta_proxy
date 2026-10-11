@@ -124,8 +124,9 @@ Mapeamento de erros para o cliente: 401 (chave inválida), 402 (orçamento esgot
 
 ## 8. Rate limit, orçamento e custo
 
-- **Pré-voo:** estimar tokens de entrada (heurística `caracteres/3`, documentada, ou um tokenizer depois) + reservar `max_tokens` de saída. Recusar cedo se estourar o limite por minuto ou o orçamento.
-- **Reconciliação:** ao fim, ajustar com o `usage` real. Medir a diferença entre estimado e real e alertar se passar de ~15%.
+- **Como está:** rate limit por requisições/minuto (token bucket) e orçamento conferido **antes** da chamada (`gasto do mês >= limite` → 402), com o custo real somado **depois**, a partir do `usage`. É um teto macio: com até 32 requisições simultâneas por cliente, o gasto pode passar do limite pelo custo dessas chamadas em voo.
+- **Teto rígido (depois):** pré-reservar o custo máximo (entrada estimada + `max_tokens` de saída) e acertar a diferença com o `usage` real; com várias instâncias, a reserva vira operação atômica no Redis.
+- **Shadow fora do orçamento:** a chamada shadow é custo de quem opera o gateway, não do cliente. Fica registrada (com custo) só na comparação, e o gasto é limitado pelas 16 vagas de shadow simultâneas.
 - **Custo:** `(miss × preço_miss + hit × preço_hit + saída × preço_saída)` com a tabela da hora (pico/fora do pico), tudo vindo da configuração. Guardar em micro-dólares (`int64`), nunca `float` para dinheiro.
 - **Métricas de economia** no painel: cache do gateway, cache de prefixo da DeepSeek e horário fora do pico.
 
@@ -137,6 +138,7 @@ Ver regras no CLAUDE.md. Pontos de arquitetura:
 - Validação de dígito de CPF/CNPJ e Luhn para cartão (menos falsos positivos).
 - Restauração no stream com buffer pequeno para marcadores que chegam partidos entre chunks.
 - O mapa marcador → valor real só existe na memória da requisição.
+- **Fora do alcance hoje:** só `messages[].content` em texto é mascarado. Content em partes (multimodal), `tools` e `tool_calls[].function.arguments` saem sem máscara, e no stream só `content` e `reasoning_content` são restaurados.
 
 ## 10. Dados
 

@@ -118,7 +118,8 @@ mascarar e restaurar devolve o texto original, mesmo com marcadores partidos ent
 
 ## Limitações
 
-- **LGPD:** a detecção por padrão não pega nomes, endereços nem dados sem formato fixo. É uma camada de redução de risco, não garantia de conformidade.
+- **LGPD:** a detecção por padrão não pega nomes, endereços nem dados sem formato fixo. É uma camada de redução de risco, não garantia de conformidade. Só o texto de `messages[].content` é mascarado: content multimodal e argumentos de tool calls passam sem máscara.
+- **Orçamento é teto macio:** conferido antes da chamada e somado depois; requisições simultâneas podem passar um pouco do limite. Chamadas shadow não contam no orçamento do cliente.
 - **Uma instância:** cache, rate limit e orçamento vivem em memória. Com várias instâncias (Cloud Run escalando), precisam ir para o Redis.
 - **Preços** da DeepSeek no `comporta.json` são exemplos. Confira a tabela oficial antes de usar com dinheiro real.
 - Dívida deliberada, com o gatilho para pagar cada item: [`.claude/docs/backlog.md`](.claude/docs/backlog.md).
