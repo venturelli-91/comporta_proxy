@@ -129,6 +129,25 @@ that masking then restoring returns the original text, even with placeholders sp
 - **DeepSeek prices** in `comporta.json` are examples. Check the official table before using real money.
 - Deliberate debt, with the trigger for paying each item: [`.claude/docs/backlog.md`](.claude/docs/backlog.md).
 
+## Toward LGPD compliance
+
+No gateway guarantees compliance on its own: it depends on the company's contracts and processes. Comporta's
+part is to send less personal data out and to produce evidence of what went out. Next steps for that:
+
+**In the gateway**
+- [ ] Detect names, addresses and health data with an NER model for Portuguese that runs locally (sending the text to an external AI for detection would be the same leak).
+- [ ] Measure detection: precision and recall on a labeled test set, published next to the load numbers.
+- [ ] Cover what is not masked today: tool-call arguments, image and file content.
+- [ ] Block policy per client: reject the request when a sensitive category is detected, instead of masking it.
+- [ ] Audit trail without content: who sent which data categories, to which provider, when, under which legal basis.
+
+**Outside the code (the company's side)**
+- [ ] A legal basis recorded for each use of personal data.
+- [ ] A data processing agreement with each provider: retention, use for training, subprocessors.
+- [ ] International transfer under the ANPD's rules (standard contractual clauses), since providers like DeepSeek are hosted abroad.
+- [ ] A data protection impact assessment (RIPD) for each AI use case.
+- [ ] A data protection officer, a channel for data subject requests and an incident response plan.
+
 ## How it was built
 
 The process (a "software house" of agents, checklists, a per-feature log, communication for each audience) is in

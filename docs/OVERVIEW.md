@@ -149,3 +149,4 @@ I come from TypeScript, React and Python, and built Comporta while learning Go. 
 - Prometheus metrics with labels and OpenTelemetry tracing.
 - Deploy on Cloud Run with Secret Manager.
 - A hard budget cap that reserves the maximum cost up front, and rate limits by estimated tokens.
+- Steps toward LGPD compliance, in the gateway and outside it: see "Toward LGPD compliance" in the [README](../README.md#toward-lgpd-compliance).
