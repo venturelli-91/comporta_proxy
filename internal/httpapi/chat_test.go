@@ -864,3 +864,102 @@ func TestCabecalhoEnviadoMostraMascarado(t *testing.T) {
 		})
 	}
 }
+
+// SDKs also send content as an array of parts. Text parts are masked like a string; a non-text
+// part (image, audio) with LGPD on is refused instead of leaving unmasked. A null content
+// (assistant tool call) stays null.
+func TestLGPDConteudoEmPartes(t *testing.T) {
+	c := novoCenario(t)
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja", LGPD: true})
+	partes := `{"model":"rapido","messages":[
+		{"role":"assistant","content":null},
+		{"role":"user","content":[{"type":"text","text":"meu CPF é 529.982.247-25"},{"type":"text","text":"e-mail a@b.com"}]}]}`
+	resp := c.chat(chave, partes)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("text parts: status %d, want 200", resp.StatusCode)
+	}
+	enviado := c.espiao.corpo()
+	if strings.Contains(enviado, "529.982.247-25") || strings.Contains(enviado, "a@b.com") ||
+		!strings.Contains(enviado, "[CPF_1]") || !strings.Contains(enviado, "[EMAIL_1]") {
+		t.Fatalf("provider received personal data: %s", enviado)
+	}
+	if !strings.Contains(enviado, `"content":null`) {
+		t.Fatalf("null content was rewritten: %s", enviado)
+	}
+
+	imagem := `{"model":"rapido","messages":[{"role":"user","content":[{"type":"text","text":"veja"},
+		{"type":"image_url","image_url":{"url":"https://exemplo.com/rg.png"}}]}]}`
+	resp = c.chat(chave, imagem)
+	resp.Body.Close()
+	if resp.StatusCode != 400 {
+		t.Fatalf("image part with LGPD on: status %d, want 400", resp.StatusCode)
+	}
+	if r := c.relatorio(); r.Total.PII != 2 { // relatorio shuts the server down: last
+		t.Fatalf("PII = %d, want 2", r.Total.PII)
+	}
+}
+
+// The Bearer header is a login too: without a limit, any /admin/* route would be an unlimited
+// way to guess ADMIN_TOKEN. Wrong tokens spend the same per-IP limit as /admin/login; a correct
+// token gives its token back, so automation with the right token isn't throttled.
+func TestBearerErradoGastaOLimiteDeLogin(t *testing.T) {
+	c := novoCenario(t)
+	tentar := func(token, ip string) int {
+		req, _ := http.NewRequest("GET", c.url+"/admin/clientes", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("X-Forwarded-For", ip)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for range 10 {
+		if st := tentar(tokenAdmin, "203.0.113.9"); st != 200 {
+			t.Fatalf("correct Bearer: status %d, want 200 (must not spend the limit)", st)
+		}
+	}
+	var ultimo int
+	for range 6 {
+		ultimo = tentar("chute", "203.0.113.9")
+	}
+	if ultimo != 429 {
+		t.Fatalf("6th wrong Bearer from the same IP: status %d, want 429", ultimo)
+	}
+	if st := tentar(tokenAdmin, "203.0.113.9"); st != 429 {
+		t.Fatalf("a right guess after the limit must not get in: status %d, want 429", st)
+	}
+	if st := tentar(tokenAdmin, "198.51.100.7"); st != 200 {
+		t.Fatalf("admin on another IP was locked out: status %d", st)
+	}
+}
+
+// 20 wrong Bearers at the same time from the same IP: at most 5 may reach the comparison (401);
+// without check-compare-spend as one step, all of them would pass the check first.
+func TestBearerParaleloRespeitaLimite(t *testing.T) {
+	c := novoCenario(t)
+	var wg sync.WaitGroup
+	var comparadas atomic.Int32
+	for range 20 {
+		wg.Go(func() {
+			req, _ := http.NewRequest("GET", c.url+"/admin/clientes", nil)
+			req.Header.Set("Authorization", "Bearer chute")
+			req.Header.Set("X-Forwarded-For", "203.0.113.9")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusUnauthorized {
+				comparadas.Add(1)
+			}
+		})
+	}
+	wg.Wait()
+	if n := comparadas.Load(); n != 5 {
+		t.Fatalf("%d wrong Bearers reached the comparison; the limit is 5", n)
+	}
+}
