@@ -123,6 +123,7 @@ exercise the real network code at no cost.
 
 - Masking works by pattern. It doesn't catch names, addresses or data without a fixed format, and it only
   covers message text, not images or tool-call arguments. It reduces risk; it doesn't guarantee LGPD compliance.
+  Measured on a labeled corpus: recall 0.91 on the covered types, 0.74 on all personal data (README, Numbers).
 - The budget is a soft cap: it's checked before each call and the real cost is added afterwards, so concurrent
   requests can go slightly over.
 - It runs as a single instance. Cache, rate limits and budgets live in memory, and scaling out needs Redis.
@@ -149,3 +150,4 @@ I come from TypeScript, React and Python, and built Comporta while learning Go. 
 - Prometheus metrics with labels and OpenTelemetry tracing.
 - Deploy on Cloud Run with Secret Manager.
 - A hard budget cap that reserves the maximum cost up front, and rate limits by estimated tokens.
+- Steps toward LGPD compliance, in the gateway and outside it: see "Toward LGPD compliance" in the [README](../README.md#toward-lgpd-compliance).

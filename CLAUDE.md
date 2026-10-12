@@ -220,6 +220,7 @@ with this key when the database is empty).
 - **Public demo on Render, not Cloud Run:** free tier without a card; Cloud Run requires billing. The demo uses only the fake provider, with a public token and key (disposable instance, ephemeral disk recreated by `DEMO_CHAVE`).
 - **Config defaults filled in one place (`Carregar`):** whoever uses the config gets it complete; hand-built configs in tests declare their timeouts explicitly.
 - **Budget is a soft cap; shadow cost stays outside the client's budget:** see `docs/ARCHITECTURE.md` §8.
+- **LGPD detection measured on a labeled corpus, not tuned to it:** precision/recall per type gated with a floor at the measured values; a fix for a miss comes with new corpus lines it wasn't written against.
 - **Everything in the repository is in English** (international portfolio): docs, comments, UI and
   Conventional Commits in English. Identifiers follow in phase 2. This overrides the earlier Portuguese rule.
 
