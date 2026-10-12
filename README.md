@@ -7,7 +7,7 @@ the same question paid for twice, the provider that goes down, and personal data
 New here? Start with the **[project overview](docs/OVERVIEW.md)**: the problem, how a request flows, how the
 personal-data masking works, the measured numbers and the main design decisions.
 
-![Comporta dashboard](docs/img/painel.png)
+![Playground: the provider receives placeholders, the app gets the real data back](docs/img/playground.png)
 
 ## Live demo
 
@@ -31,6 +31,24 @@ Demo limits: it sleeps after 15 min without traffic (the first visit takes ~1 mi
 numbers below were measured locally), and the disk is wiped on every restart, which recreates the demo client.
 The admin token and the key are public on purpose: the instance is disposable and **never receives the
 `DEEPSEEK_API_KEY`** (see `render.yaml`).
+
+## See it running
+
+Screenshots from a local run against the real DeepSeek API, with made-up personal data.
+
+**Playground** (above): the message leaves as `[CPF_1]`, `[EMAIL_1]` and `[TELEFONE_1]`; the answer comes back
+with the real values, streamed token by token.
+
+**Overview:** calls paid vs answered by the cache, spend, cache savings, p95 latency, error rate and personal data
+protected, refreshed every 5 s. The p95 here is DeepSeek's reasoning time on a long answer; the gateway's own
+overhead is in [Numbers](#numbers).
+
+![Overview: 19 calls, 42% answered by the cache, 0% errors](docs/img/painel.png)
+
+**Migration (shadow):** the primary model answers the client while a candidate gets the same call in the
+background. Here the candidate (`deepseek-v4-pro`) costs about 6x more and is 29% slower, for answers of about the same size.
+
+![Shadow: primary vs candidate latency, cost and response size](docs/img/shadow.png)
 
 ## What it does
 
@@ -73,6 +91,8 @@ LGPD detection quality, on a hand-labeled corpus of 46 lines ([`internal/lgpd/te
 - **Covered types:** precision 0.97, recall 0.91. **All personal data:** recall 0.74.
 - Misses: a CPF written with spaces, an email spelled out ("maria arroba exemplo ponto com"), a mobile number without area code. The false alarm is an order number that happens to pass the CPF check digit.
 - Gated in `go test` (`TestQualidadeDeteccao`) with a floor at the measured values. The corpus is small and written by the author: a regression floor, not a benchmark.
+
+![go test output: each miss by corpus line, then precision and recall per type](docs/img/detection.png)
 
 1,000 req/s is the test rate, not a measured limit. The cache scenario is artificial: in real life the gain depends on how often applications repeat questions. Methodology in [`.claude/docs/features/11-load.md`](.claude/docs/features/11-load.md).
 
