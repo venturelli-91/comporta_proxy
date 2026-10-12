@@ -123,6 +123,7 @@ exercise the real network code at no cost.
 
 - Masking works by pattern. It doesn't catch names, addresses or data without a fixed format, and it only
   covers message text, not images or tool-call arguments. It reduces risk; it doesn't guarantee LGPD compliance.
+  Measured on a labeled corpus: recall 0.91 on the covered types, 0.74 on all personal data (README, Numbers).
 - The budget is a soft cap: it's checked before each call and the real cost is added afterwards, so concurrent
   requests can go slightly over.
 - It runs as a single instance. Cache, rate limits and budgets live in memory, and scaling out needs Redis.

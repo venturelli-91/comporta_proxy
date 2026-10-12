@@ -93,3 +93,11 @@ Harvested from the `ponytail:` comments on 10/09 (updated 10/11). Each line has 
 - [x] Empty `AdminToken` checked on every login → refused once in `Novo`
 - [x] The dashboard showed the login screen for any session error → only on 401
 - [ ] Merge `resiliencia` into `gateway` (−6 lines): kept on purpose for now, "interface in the consumer" is documented and an interview talking point
+
+## LGPD detection misses found by the corpus (10/12)
+Each fix must add new corpus lines it wasn't written against, then raise the floor in `qualidade_test.go`.
+- [ ] CPF written with spaces (`529 982 247 25`) is not detected
+- [ ] Mobile number without area code (`98765-4321`) is not detected; risk of false positives on short numbers
+- [ ] Spelled-out email (`maria arroba exemplo ponto com`) is not detected
+- [ ] An order number that passes the CPF check digit (`98765432100`) is masked: the accepted cost of check-digit detection, possibly mitigated by context words ("pedido", "protocolo")
+- [ ] Names and addresses: need local NER (see README, "Toward LGPD compliance")

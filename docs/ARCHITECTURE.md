@@ -138,6 +138,7 @@ See the rules in CLAUDE.md. Architecture points:
 - Check-digit validation for CPF/CNPJ and Luhn for cards (fewer false positives).
 - Stream restoration with a small buffer for placeholders split across chunks.
 - The placeholder → real value map exists only in the request's memory.
+- **Quality is measured, not assumed:** `TestQualidadeDeteccao` scores precision and recall per type on a labeled corpus (`internal/lgpd/testdata/corpus.txt`) with a floor at the measured values. The detector isn't tuned to the corpus: a fix for a miss comes with new lines it wasn't written against.
 - **Out of reach today:** only text `messages[].content` is masked. Multipart (multimodal) content, `tools` and `tool_calls[].function.arguments` go out unmasked, and in streams only `content` and `reasoning_content` are restored.
 
 ## 10. Data
