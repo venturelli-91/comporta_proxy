@@ -216,6 +216,7 @@ with this key when the database is empty).
 - **Singleflight with `context.WithoutCancel`:** the leader disconnecting doesn't bring down whoever is waiting for the same response.
 - **The admin cookie is a random session** (the server keeps only the hash, logout revokes it), `HttpOnly; SameSite=Strict`; the token is compared in constant time.
 - **Login limited per IP, consumed on entry:** `Allow()` checks and spends in a single step (no race between parallel attempts).
+- **The admin Bearer header shares the login limit:** only a wrong token spends it, and once it's spent even the right token is refused (a 200 would confirm the guess). Check, compare and spend run under one mutex.
 - **LGPD fails closed on content it can't mask:** text parts of array `content` are masked; with LGPD on, an image/audio part gets a 400 instead of leaving unmasked.
 - **XFF only behind a trusted proxy** (`K_SERVICE`/`TRUST_PROXY=1`): without a proxy the header belongs to the client and would give it a fresh bucket on every attempt.
 - **Public demo on Render, not Cloud Run:** free tier without a card; Cloud Run requires billing. The demo uses only the fake provider, with a public token and key (disposable instance, ephemeral disk recreated by `DEMO_CHAVE`).

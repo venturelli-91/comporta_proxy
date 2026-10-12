@@ -73,6 +73,8 @@ type Servidor struct {
 	sessMu     sync.Mutex
 	sessoes    map[string]time.Time     // cookie hash → expiry
 	tentativas map[string]*rate.Limiter // login attempts per IP
+	// ponytail: global lock around a microsecond compare; per-IP locks if admin Bearer traffic ever matters.
+	bearerMu sync.Mutex // check, compare and spend as one step, so parallel guesses can't all pass the check
 
 	gastoMu  sync.Mutex
 	gastoMes string

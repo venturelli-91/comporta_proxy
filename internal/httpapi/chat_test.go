@@ -899,3 +899,67 @@ func TestLGPDConteudoEmPartes(t *testing.T) {
 		t.Fatalf("PII = %d, want 2", r.Total.PII)
 	}
 }
+
+// The Bearer header is a login too: without a limit, any /admin/* route would be an unlimited
+// way to guess ADMIN_TOKEN. Wrong tokens spend the same per-IP limit as /admin/login; a correct
+// token gives its token back, so automation with the right token isn't throttled.
+func TestBearerErradoGastaOLimiteDeLogin(t *testing.T) {
+	c := novoCenario(t)
+	tentar := func(token, ip string) int {
+		req, _ := http.NewRequest("GET", c.url+"/admin/clientes", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("X-Forwarded-For", ip)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for range 10 {
+		if st := tentar(tokenAdmin, "203.0.113.9"); st != 200 {
+			t.Fatalf("correct Bearer: status %d, want 200 (must not spend the limit)", st)
+		}
+	}
+	var ultimo int
+	for range 6 {
+		ultimo = tentar("chute", "203.0.113.9")
+	}
+	if ultimo != 429 {
+		t.Fatalf("6th wrong Bearer from the same IP: status %d, want 429", ultimo)
+	}
+	if st := tentar(tokenAdmin, "203.0.113.9"); st != 429 {
+		t.Fatalf("a right guess after the limit must not get in: status %d, want 429", st)
+	}
+	if st := tentar(tokenAdmin, "198.51.100.7"); st != 200 {
+		t.Fatalf("admin on another IP was locked out: status %d", st)
+	}
+}
+
+// 20 wrong Bearers at the same time from the same IP: at most 5 may reach the comparison (401);
+// without check-compare-spend as one step, all of them would pass the check first.
+func TestBearerParaleloRespeitaLimite(t *testing.T) {
+	c := novoCenario(t)
+	var wg sync.WaitGroup
+	var comparadas atomic.Int32
+	for range 20 {
+		wg.Go(func() {
+			req, _ := http.NewRequest("GET", c.url+"/admin/clientes", nil)
+			req.Header.Set("Authorization", "Bearer chute")
+			req.Header.Set("X-Forwarded-For", "203.0.113.9")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusUnauthorized {
+				comparadas.Add(1)
+			}
+		})
+	}
+	wg.Wait()
+	if n := comparadas.Load(); n != 5 {
+		t.Fatalf("%d wrong Bearers reached the comparison; the limit is 5", n)
+	}
+}

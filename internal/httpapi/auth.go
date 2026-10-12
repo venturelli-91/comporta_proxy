@@ -159,7 +159,23 @@ func (s *Servidor) admin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ok := false
 		if t, temBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); temBearer {
-			ok = iguais(t, s.d.AdminToken)
+			// The Bearer header is a login too, so it shares the per-IP limit with /admin/login. Only a
+			// wrong token spends it (automation with the right token isn't throttled), but once it's
+			// spent even a right guess stays out, or a 200 would tell the attacker they found it.
+			lim := s.limiteLogin(s.ipDe(r))
+			s.bearerMu.Lock()
+			esgotado := lim.Tokens() < 1
+			if !esgotado {
+				if ok = iguais(t, s.d.AdminToken); !ok {
+					lim.Allow()
+				}
+			}
+			s.bearerMu.Unlock()
+			if esgotado {
+				retryAfter(w, time.Minute)
+				erro(w, http.StatusTooManyRequests, "muitas_tentativas", "too many login attempts, wait a minute")
+				return
+			}
 		} else if c, err := r.Cookie(cookieAdmin); err == nil {
 			ok = s.sessaoValida(c.Value)
 		}
