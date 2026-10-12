@@ -1,0 +1,64 @@
+# Labeled corpus for TestQualidadeDeteccao. One example per line; personal data tagged {{TYPE:value}}.
+# Types the detector covers: CPF CNPJ CARTAO EMAIL TELEFONE. Labeled but not covered: NOME ENDERECO.
+# Untagged numbers are deliberate negatives. Fabricated data only. Don't tune the detector to this file:
+# a fix must come with new lines it wasn't written against.
+
+# CPF
+meu CPF é {{CPF:529.982.247-25}}
+cpf {{CPF:52998224725}} para o cadastro
+CPF: {{CPF:111.444.777-35}}, confere?
+o titular é {{CPF:123.456.789-09}} e o dependente {{CPF:987.654.321-00}}
+segue o documento ({{CPF:111.444.777-35}}) em anexo
+meu cpf é {{CPF:529 982 247 25}} com espaços
+CPF {{CPF:529.982.24725}} meio formatado
+
+# CNPJ
+empresa {{CNPJ:11.222.333/0001-81}}
+CNPJ {{CNPJ:11444777000161}} ativo
+fornecedor {{CNPJ:11.444.777/0001-61}} e cliente {{CNPJ:11.222.333/0001-81}}
+
+# Cards
+cartão {{CARTAO:4111 1111 1111 1111}}
+paguei com o {{CARTAO:5555555555554444}}
+amex {{CARTAO:3782-822463-10005}}
+
+# Email
+escreva para {{EMAIL:ana.souza+loja@exemplo.com.br}} hoje
+contato: {{EMAIL:JOAO.PEREIRA@EXEMPLO.COM}}
+e-mails {{EMAIL:a@exemplo.com}}, {{EMAIL:b_c@sub.exemplo.org}}
+mande para {{EMAIL:maria arroba exemplo ponto com}}
+
+# Phones
+liga {{TELEFONE:(11) 98765-4321}}
+whats {{TELEFONE:+55 11 98765-4321}}
+{{TELEFONE:11987654321}} é meu celular
+fixo {{TELEFONE:(21) 3456-7890}}
+telefone {{TELEFONE:21 3456 7890}}
+celular sem DDD {{TELEFONE:98765-4321}}
+fone {{TELEFONE:+5561993601234}}
+
+# Mixed
+CPF {{CPF:529.982.247-25}}, e-mail {{EMAIL:ana@exemplo.com}}, fone {{TELEFONE:(11) 98765-4321}}
+sou {{NOME:Ana Souza}}, CPF {{CPF:111.444.777-35}}
+cliente {{NOME:João Pereira da Silva}} mora na {{ENDERECO:Rua Augusta, 1500, apto 42, São Paulo}}
+envie para {{ENDERECO:Av. Brasil, 200, Rio de Janeiro}} aos cuidados de {{NOME:Maria Oliveira}}
+o paciente {{NOME:Carlos Mendes}} relatou dor de cabeça
+falei com a {{NOME:Fernanda}} ontem, o email dela é {{EMAIL:fernanda@exemplo.com}}
+
+# Negatives (nothing here is personal data)
+pedido 12345 de 2026
+protocolo 9529982247251
+reunião em 12/10/2026 às 14:30
+o total foi R$ 1.234,56
+CEP 01310-100
+código de barras 23793381286008200009040000072301
+versão 1.24.3 do Go
+CPF 529.982.247-26 com dígito errado
+111.111.111-11 não é CPF válido
+CNPJ 11.222.333/0001-80 inválido
+cartão 4111 1111 1111 1112 inválido
+ligue 0800 123 4567 para o suporte
+o ramal é 4321
+o placar foi 98 a 76
+nota fiscal 000123456789
+pedido nº 98765432100 confirmado
