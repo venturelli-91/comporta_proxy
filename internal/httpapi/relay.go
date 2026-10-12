@@ -200,25 +200,60 @@ func usoDe(b []byte, stream bool) gateway.Uso {
 	return uso
 }
 
-// mascararMensagens replaces the personal data in messages[].content (text) with placeholders.
-// All messages are masked together so a literal placeholder in one can't collide with real data
-// in another.
-// ponytail: multipart (multimodal) content passes unmasked; handle it when a client uses it.
+// errNaoTexto: a non-text content part (image, audio) can't be masked, so with LGPD on the request
+// is refused rather than sent with personal data in it (fail closed).
+var errNaoTexto = errors.New("non-text content")
+
+// mascararMensagens replaces the personal data in messages[].content with placeholders, whether
+// content is a string or an array of parts (as many SDKs send it). All texts are masked together
+// so a literal placeholder in one can't collide with real data in another.
+// ponytail: tools, tool_calls arguments, name and user still go out unmasked (backlog).
 func mascararMensagens(corpo map[string]json.RawMessage, mapa *lgpd.Mapa) error {
 	var msgs []map[string]json.RawMessage
 	if err := json.Unmarshal(corpo["messages"], &msgs); err != nil {
 		return err
 	}
 	var textos []string
-	var alvos []map[string]json.RawMessage
+	var gravar []func(string) // writes each masked text back where it came from
+	var comPartes []func() error
 	for _, m := range msgs {
-		var t string
-		if json.Unmarshal(m["content"], &t) == nil {
-			textos, alvos = append(textos, t), append(alvos, m)
+		bruto := bytes.TrimSpace(m["content"])
+		switch {
+		case len(bruto) > 0 && bruto[0] == '"':
+			var t string
+			if err := json.Unmarshal(bruto, &t); err != nil {
+				return err
+			}
+			textos = append(textos, t)
+			gravar = append(gravar, func(s string) { m["content"], _ = json.Marshal(s) })
+		case len(bruto) > 0 && bruto[0] == '[':
+			var partes []map[string]json.RawMessage
+			if err := json.Unmarshal(bruto, &partes); err != nil {
+				return err
+			}
+			for _, p := range partes {
+				var tipo, t string
+				_ = json.Unmarshal(p["type"], &tipo)
+				if tipo != "text" {
+					return errNaoTexto
+				}
+				if err := json.Unmarshal(p["text"], &t); err != nil {
+					return err
+				}
+				textos = append(textos, t)
+				gravar = append(gravar, func(s string) { p["text"], _ = json.Marshal(s) })
+			}
+			comPartes = append(comPartes, func() (err error) { m["content"], err = json.Marshal(partes); return err })
 		}
+		// null or absent content (assistant tool call) has nothing to mask and stays as it is.
 	}
 	for i, t := range mapa.MascararVarios(textos) {
-		alvos[i]["content"], _ = json.Marshal(t)
+		gravar[i](t)
+	}
+	for _, f := range comPartes {
+		if err := f(); err != nil {
+			return err
+		}
 	}
 	b, err := json.Marshal(msgs)
 	corpo["messages"] = b

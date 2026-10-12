@@ -37,7 +37,7 @@ Public demo: `render.yaml` + `DEMO_CHAVE` seed (10/10). Cloud Run waits until th
 ## After the interview (P1/P2)
 - [ ] Rate limit by estimated tokens reconciled with `usage`
 - [ ] Hard budget cap: pre-reserve the maximum cost and settle with the real `usage` (today it's a soft cap)
-- [ ] Mask `tools`, `tool_calls[].function.arguments` and multimodal content; restore `tool_calls` in streams
+- [ ] Mask `tools`, `tool_calls[].function.arguments`, `name` and `user`; restore `tool_calls` in streams (array text parts masked and non-text parts refused on 10/12)
 - [ ] Richer shadow comparison report (content difference, not just size)
 - [ ] Metrics with the official Prometheus client + OpenTelemetry
 - [ ] Postgres + Redis (cache and rate limit shared across instances)

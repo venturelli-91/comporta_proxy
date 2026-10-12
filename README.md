@@ -139,7 +139,7 @@ that masking then restoring returns the original text, even with placeholders sp
 
 ## Limitations
 
-- **LGPD:** pattern detection does not catch names, addresses or data without a fixed format. It is a risk-reduction layer, not a compliance guarantee (measured recall: 0.91 on covered types, 0.74 on all personal data; see [Numbers](#numbers)). Only the text of `messages[].content` is masked: multimodal content and tool-call arguments pass through unmasked.
+- **LGPD:** pattern detection does not catch names, addresses or data without a fixed format. It is a risk-reduction layer, not a compliance guarantee (measured recall: 0.91 on covered types, 0.74 on all personal data; see [Numbers](#numbers)). Message text is masked whether `content` is a string or an array of text parts; with LGPD on, a request with an image or audio part is refused (400) rather than sent unmasked. `tools`, tool-call arguments, `name` and `user` still pass through unmasked.
 - **The budget is a soft cap:** it is checked before the call and added up after it, so concurrent requests can go slightly over the limit. Shadow calls do not count against the client's budget.
 - **Single instance:** cache, rate limits and budgets live in memory. With several instances (Cloud Run scaling out) they need to move to Redis.
 - **DeepSeek prices** in `comporta.json` are examples. Check the official table before using real money.
@@ -153,7 +153,7 @@ part is to send less personal data out and to produce evidence of what went out.
 **In the gateway**
 - [ ] Detect names, addresses and health data with an NER model for Portuguese that runs locally (sending the text to an external AI for detection would be the same leak).
 - [x] Measure detection: precision and recall on a labeled test set, published next to the load numbers.
-- [ ] Cover what is not masked today: tool-call arguments, image and file content.
+- [ ] Cover what is not masked today: tool-call arguments, `name` and `user`; mask image and file content instead of refusing it.
 - [ ] Block policy per client: reject the request when a sensitive category is detected, instead of masking it.
 - [ ] Audit trail without content: who sent which data categories, to which provider, when, under which legal basis.
 

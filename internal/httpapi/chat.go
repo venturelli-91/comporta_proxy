@@ -109,7 +109,10 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 
 	// LGPD before the cache: the cache key and everything that leaves from here only see placeholders.
 	if p.cli.LGPD {
-		if err := mascararMensagens(p.corpo, p.mapa); err != nil {
+		if err := mascararMensagens(p.corpo, p.mapa); errors.Is(err, errNaoTexto) {
+			s.falhar(w, p, http.StatusBadRequest, "corpo_invalido", "only text content is accepted with LGPD masking on")
+			return
+		} else if err != nil {
 			s.falhar(w, p, http.StatusBadRequest, "corpo_invalido", "invalid messages")
 			return
 		}

@@ -864,3 +864,38 @@ func TestCabecalhoEnviadoMostraMascarado(t *testing.T) {
 		})
 	}
 }
+
+// SDKs also send content as an array of parts. Text parts are masked like a string; a non-text
+// part (image, audio) with LGPD on is refused instead of leaving unmasked. A null content
+// (assistant tool call) stays null.
+func TestLGPDConteudoEmPartes(t *testing.T) {
+	c := novoCenario(t)
+	_, chave := c.novoCliente(armazenamento.Cliente{Nome: "loja", LGPD: true})
+	partes := `{"model":"rapido","messages":[
+		{"role":"assistant","content":null},
+		{"role":"user","content":[{"type":"text","text":"meu CPF é 529.982.247-25"},{"type":"text","text":"e-mail a@b.com"}]}]}`
+	resp := c.chat(chave, partes)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("text parts: status %d, want 200", resp.StatusCode)
+	}
+	enviado := c.espiao.corpo()
+	if strings.Contains(enviado, "529.982.247-25") || strings.Contains(enviado, "a@b.com") ||
+		!strings.Contains(enviado, "[CPF_1]") || !strings.Contains(enviado, "[EMAIL_1]") {
+		t.Fatalf("provider received personal data: %s", enviado)
+	}
+	if !strings.Contains(enviado, `"content":null`) {
+		t.Fatalf("null content was rewritten: %s", enviado)
+	}
+
+	imagem := `{"model":"rapido","messages":[{"role":"user","content":[{"type":"text","text":"veja"},
+		{"type":"image_url","image_url":{"url":"https://exemplo.com/rg.png"}}]}]}`
+	resp = c.chat(chave, imagem)
+	resp.Body.Close()
+	if resp.StatusCode != 400 {
+		t.Fatalf("image part with LGPD on: status %d, want 400", resp.StatusCode)
+	}
+	if r := c.relatorio(); r.Total.PII != 2 { // relatorio shuts the server down: last
+		t.Fatalf("PII = %d, want 2", r.Total.PII)
+	}
+}
